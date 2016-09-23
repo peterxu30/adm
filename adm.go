@@ -32,31 +32,31 @@ type Writer interface { //allows writing to file or to endpoint
     WriteSomeTimeseriesData(dest string, start int, end int)
 }
 
-type DataCollection struct { //need better name
-    Url string
-	Uuids []string
-    Metadatas []Metadata
-    TimeseriesDatas []TimeseriesData
-}
-
 type Metadata struct {
-	Path string
-	Uuid string `json:"uuid"`
-	Properties interface{}
-	Metadata interface{}
+    Path string
+    Uuid string `json:"uuid"`
+    Properties interface{}
+    Metadata interface{}
 }
 
 type TimeseriesData struct {
-	Uuid string
-	Readings interface{} //array of string arrays
+    Uuid string
+    Readings interface{} //array of string arrays
 }
 
 type CombinedData struct { //final form of data to send out
     Path string
     Uuid string `json:"uuid"`
     Properties interface{}
-	Metadata interface{}
+    Metadata interface{}
     Readings interface{}
+}
+
+type DataCollection struct { //need better name
+    Url string
+	Uuids []string
+    Metadatas [][]Metadata
+    TimeseriesDatas [][]TimeseriesData
 }
 
 func NewDataCollection(url string) *DataCollection {
@@ -74,7 +74,7 @@ func (collection *DataCollection) ReadAllUuids() {
 }
 
 func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
-    collection.Metadatas = make([]Metadata, len(collection.Uuids))
+    collection.Metadatas = make([][]Metadata, len(collection.Uuids))
     for i, uuid := range collection.Uuids {
         query := "select * where uuid='" + uuid + "'"
         body := makeQuery(collection.Url, query)
@@ -83,7 +83,7 @@ func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
 }
 
 func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnecessary
-    collection.TimeseriesDatas = make([]TimeseriesData, len(collection.Uuids))
+    collection.TimeseriesDatas = make([][]TimeseriesData, len(collection.Uuids))
     for i, uuid := range collection.Uuids {
         query := "select data before now as ns where uuid='" + uuid +"'"
         body := makeQuery(collection.Url, query)
@@ -103,7 +103,7 @@ func (collection *DataCollection) WriteAllUuids(dest string) {
 }
 
 func (collection *DataCollection) WriteAllMetadata(dest string) {
-    collection.WriteSomeMetadata(dest, len(collection.Uuids))
+    collection.WriteSomeMetadata(dest, 0, len(collection.Uuids))
 }
 
 func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
@@ -115,7 +115,8 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
     if err != nil {
         panic(err)
     }
-    for i, uuid := range collection.Uuids[start:end] {
+    for i := start; i < end; i++ {
+        uuid := collection.Uuids[i]
         if i > 0 {
             f.Write([]byte(","))
         }
@@ -131,7 +132,7 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
 }
 
 func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
-    collection.WriteSomeTimeseriesData(dest, len(collection.Uuids))
+    collection.WriteSomeTimeseriesData(dest, 0, len(collection.Uuids))
 }
 
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
@@ -143,7 +144,8 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int
     if err != nil {
         panic(err)
     }
-    for i, uuid := range collection.Uuids[start:end] {
+    for i := start; i < end; i++ {
+        uuid := collection.Uuids[i]
         if i > 0 {
             f.Write([]byte(","))
         }
@@ -195,8 +197,12 @@ func main() {
     collection := NewDataCollection(Url)
     collection.ReadAllUuids()
     collection.WriteAllUuids(UuidDestination)
-    collection.WriteSomeMetadata(MetadataDestination, 10)
-    collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 10)
+    collection.WriteSomeMetadata(MetadataDestination, 0, 10)
+    collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
+    // collection.ReadAllMetadata()
+    // fmt.Println(collection.Metadatas)
+    // collection.ReadAllTimeseriesData()
+    // fmt.Println(collection.TimeseriesDatas)
     // body := makeQuery(Url, "select data before now as ns where uuid='79fc7217-7795-58d0-8deb-e2353f88b4f8'")// where uuid='62710721-5135-56d5-8d38-f1d3e9f87f70'")
     // ioutil.WriteFile("data_example.txt", body, 0644)
 
