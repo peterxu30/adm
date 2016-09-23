@@ -6,16 +6,31 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	// "os"
-	// "strconv"
+	"os"
+	"strconv"
 	// "strings"
 )
 
 const (
     Url = "http://castle.cs.berkeley.edu:8079/api/query"
+    UuidDestination = "uuids.txt"
+    MetadataDestination = "metadata.txt"
+    TimeseriesDataDestination = "timeseriesdata.txt"
 )
 
-type DataCollection struct {
+type Reader interface { //potentially unnecessary. no point in storing all of this information in memory is there?
+    ReadAllUuids() //this is necessary
+    ReadAllMetadata()
+    ReadAllTimeseriesData()
+}
+
+type Writer interface { //allows writing from file or from endpoint
+    WriteAllUuids() //mainly for logging purposes
+    WriteAllMetadata()
+    WriteAllTimeseriesData()
+}
+
+type DataCollection struct { //need better name
     Url string
 	Uuids []string
     Metadatas []Metadata
@@ -51,12 +66,12 @@ func NewDataCollection(url string) *DataCollection {
     }
 }
 
-func (collection *DataCollection) FetchAllUuids() {
-    body := makeQuery(Url, "select distinct uuid")
+func (collection *DataCollection) ReadAllUuids() {
+    body := makeQuery(collection.Url, "select distinct uuid")
     json.Unmarshal(body, &(collection.Uuids))
 }
 
-func (collection *DataCollection) FetchAllMetadata() {
+func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
     collection.Metadatas = make([]Metadata, len(collection.Uuids))
     for i, uuid := range collection.Uuids {
         query := "select * where uuid='" + uuid + "'"
@@ -65,7 +80,7 @@ func (collection *DataCollection) FetchAllMetadata() {
     }
 }
 
-func (collection *DataCollection) FetchAllTimeseriesData() {
+func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnecessary
     collection.TimeseriesDatas = make([]TimeseriesData, len(collection.Uuids))
     for i, uuid := range collection.Uuids {
         query := "select data before now as ns where uuid='" + uuid +"'"
@@ -74,8 +89,71 @@ func (collection *DataCollection) FetchAllTimeseriesData() {
     }
 }
 
-func (collection *DataCollection) getAllUuids() []string {
-	return collection.Uuids
+func (collection *DataCollection) WriteAllUuids(dest string) {
+    uuidBytes, err := json.Marshal(collection.Uuids)
+    if err != nil {
+        panic(err)
+    }
+    err = ioutil.WriteFile(dest, uuidBytes, 0644)
+    if err != nil {
+        panic(err)
+    }
+}
+
+func (collection *DataCollection) WriteAllMetadata(dest string) {
+    collection.WriteSomeMetadata(dest, len(collection.Uuids))
+}
+
+func (collection *DataCollection) WriteSomeMetadata(dest string, num int) {
+    err := ioutil.WriteFile(dest, []byte("["), 0644)
+    if err != nil {
+        panic(err)
+    }
+    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic(err)
+    }
+    for i, uuid := range collection.Uuids[:num] {
+        if i > 0 {
+            f.Write([]byte(","))
+        }
+        if i % 50 == 0 {
+            length := strconv.Itoa(i)
+            fmt.Println(length + " ids processed.")
+        }
+        query := "select * where uuid='" + uuid + "'"
+        body := makeQuery(collection.Url, query)
+        f.Write(body)
+    }
+    f.Write([]byte("]"))
+}
+
+func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
+    collection.WriteSomeTimeseriesData(dest, len(collection.Uuids))
+}
+
+func (collection *DataCollection) WriteSomeTimeseriesData(dest string, num int) {
+    err := ioutil.WriteFile(dest, []byte("["), 0644)
+    if err != nil {
+        panic(err)
+    }
+    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic(err)
+    }
+    for i, uuid := range collection.Uuids[:num] {
+        if i > 0 {
+            f.Write([]byte(","))
+        }
+        if i % 50 == 0 {
+            length := strconv.Itoa(i)
+            fmt.Println(length + " ids processed.")
+        }
+        query := "select data before now as ns where uuid='" + uuid + "'"
+        body := makeQuery(collection.Url, query)
+        f.Write(body)
+    }
+    f.Write([]byte("]"))
 }
 
 func makeQuery(url string, queryString string) (uuids []byte) {
@@ -112,12 +190,17 @@ func readMetadataFile(index int) (mdata [][]Metadata) { //for test purposes
 }
 
 func main() {
-    body := makeQuery(Url, "select data before now as ns where uuid='79fc7217-7795-58d0-8deb-e2353f88b4f8'")// where uuid='62710721-5135-56d5-8d38-f1d3e9f87f70'")
-    ioutil.WriteFile("data_example.txt", body, 0644)
+    collection := NewDataCollection(Url)
+    collection.ReadAllUuids()
+    collection.WriteAllUuids(UuidDestination)
+    collection.WriteSomeMetadata(MetadataDestination, 10)
+    collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 10)
+    // body := makeQuery(Url, "select data before now as ns where uuid='79fc7217-7795-58d0-8deb-e2353f88b4f8'")// where uuid='62710721-5135-56d5-8d38-f1d3e9f87f70'")
+    // ioutil.WriteFile("data_example.txt", body, 0644)
 
-    timedata := new([]TimeseriesData)
-    json.Unmarshal(body, &timedata)
-    fmt.Println("TIME DATA: ", (*timedata)[0].Readings.([]interface{})[0].([]interface{})[0]) //accessing data point 1, value 1
+    // timedata := new([]TimeseriesData)
+    // json.Unmarshal(body, &timedata)
+    // fmt.Println("TIME DATA: ", (*timedata)[0].Readings.([]interface{})[0].([]interface{})[0]) //accessing data point 1, value 1
 	//log uuids
  //    fmt.Println("Recording UUIDs")
 	// uuidByte := makeQuery(Url, "select distinct uuid")
@@ -144,7 +227,7 @@ func main() {
  //        }
  //    }
  //    f.Write([]byte("]"))
-    readMetadataFile(0)
+    // readMetadataFile(0)
 
 
 	// body := makeQuery(Url, "select * where uuid='8aa76954-d33d-5a03-93b1-cd07a67aa7ff'")
