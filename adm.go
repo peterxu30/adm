@@ -24,10 +24,12 @@ type Reader interface { //potentially unnecessary. no point in storing all of th
     ReadAllTimeseriesData()
 }
 
-type Writer interface { //allows writing from file or from endpoint
-    WriteAllUuids() //mainly for logging purposes
-    WriteAllMetadata()
-    WriteAllTimeseriesData()
+type Writer interface { //allows writing to file or to endpoint
+    WriteAllUuids(dest string) //mainly for logging purposes
+    WriteAllMetadata(dest string) //dest can be a url or a file name
+    WriteSomeMetadata(dest string, start int, end int)
+    WriteAllTimeseriesData(dest string)
+    WriteSomeTimeseriesData(dest string, start int, end int)
 }
 
 type DataCollection struct { //need better name
@@ -104,7 +106,7 @@ func (collection *DataCollection) WriteAllMetadata(dest string) {
     collection.WriteSomeMetadata(dest, len(collection.Uuids))
 }
 
-func (collection *DataCollection) WriteSomeMetadata(dest string, num int) {
+func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -113,7 +115,7 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, num int) {
     if err != nil {
         panic(err)
     }
-    for i, uuid := range collection.Uuids[:num] {
+    for i, uuid := range collection.Uuids[start:end] {
         if i > 0 {
             f.Write([]byte(","))
         }
@@ -132,7 +134,7 @@ func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
     collection.WriteSomeTimeseriesData(dest, len(collection.Uuids))
 }
 
-func (collection *DataCollection) WriteSomeTimeseriesData(dest string, num int) {
+func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -141,7 +143,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, num int) 
     if err != nil {
         panic(err)
     }
-    for i, uuid := range collection.Uuids[:num] {
+    for i, uuid := range collection.Uuids[start:end] {
         if i > 0 {
             f.Write([]byte(","))
         }
