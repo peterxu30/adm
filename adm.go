@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+    // "github.com/boltdb/bolt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -53,6 +54,7 @@ type CombinedData struct { //final form of data to send out
 }
 
 type DataCollection struct { //need better name
+    Log *Logger
     Url string
 	Uuids []string
     Metadatas [][]Metadata
@@ -61,6 +63,7 @@ type DataCollection struct { //need better name
 
 func NewDataCollection(url string) *DataCollection {
     return &DataCollection {
+        Log: newLogger(),
         Url: url,
         // Uuids: new([]string),
         // Metadatas: new([]Metadata),
@@ -71,6 +74,33 @@ func NewDataCollection(url string) *DataCollection {
 func (collection *DataCollection) ReadAllUuids() {
     body := makeQuery(collection.Url, "select distinct uuid")
     json.Unmarshal(body, &(collection.Uuids))
+}
+
+func (collection *DataCollection) AddAllUuidsToLog() {
+    length := len(collection.Uuids)
+    numRoutines := length / 500
+    start := 0
+    end := 500
+    if numRoutines == 0 {
+        numRoutines = 1
+        end = length
+    }
+    for numRoutines > 0 {
+        go collection.AddUuidsToLog(start, end)
+        start = end
+        end += 500
+        if end > length {
+            end = length
+        }
+        numRoutines--;
+    }
+}
+
+func (collection *DataCollection) AddUuidsToLog(start int, end int) {
+    for i := start; i < end; i++ {
+        uuid := collection.Uuids[i]
+        collection.Log.updateUuidStatus(uuid, UNSTARTED)
+    }
 }
 
 func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
@@ -196,9 +226,9 @@ func readMetadataFile(index int) (mdata [][]Metadata) { //for test purposes
 func main() {
     collection := NewDataCollection(Url)
     collection.ReadAllUuids()
-    collection.WriteAllUuids(UuidDestination)
-    collection.WriteSomeMetadata(MetadataDestination, 0, 10)
-    collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
+    go collection.WriteAllUuids(UuidDestination)
+    go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
+    go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
     // collection.ReadAllMetadata()
     // fmt.Println(collection.Metadatas)
     // collection.ReadAllTimeseriesData()
