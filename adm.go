@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+    "sync"
 	// "strings"
 )
 
@@ -55,6 +56,7 @@ type CombinedData struct { //final form of data to send out
 
 type DataCollection struct { //need better name
     Log *Logger
+    Wg sync.WaitGroup
     Url string
 	Uuids []string
     Metadatas [][]Metadata
@@ -122,6 +124,7 @@ func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnece
 }
 
 func (collection *DataCollection) WriteAllUuids(dest string) {
+    defer collection.Wg.Done()
     uuidBytes, err := json.Marshal(collection.Uuids)
     if err != nil {
         panic(err)
@@ -137,6 +140,7 @@ func (collection *DataCollection) WriteAllMetadata(dest string) {
 }
 
 func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
+    defer collection.Wg.Done()
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -166,6 +170,8 @@ func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
 }
 
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
+    defer collection.Wg.Done()
+    fmt.Println("Writing timeseriesdata\n")
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -204,6 +210,7 @@ func makeQuery(url string, queryString string) (uuids []byte) {
     if err != nil {
         panic(err)
     }
+    // fmt.Println("Query: ", string(body))
     return body
 }
 
@@ -213,7 +220,6 @@ func readMetadataFile(index int) (mdata [][]Metadata) { //for test purposes
     if err != nil {
         panic(err)
     }
-    // var mdata [][]Metadata
     json.Unmarshal(dat, &mdata)
     current_mdata := mdata[index][0]
     fmt.Println(current_mdata.Path)
@@ -226,9 +232,14 @@ func readMetadataFile(index int) (mdata [][]Metadata) { //for test purposes
 func main() {
     collection := NewDataCollection(Url)
     collection.ReadAllUuids()
+    collection.AddAllUuidsToLog()
+    collection.Wg.Add(3)
     go collection.WriteAllUuids(UuidDestination)
     go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
     go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
+    collection.Wg.Wait()
+    fmt.Println("Done\n")
+    fmt.Println(collection.Log.getUuidStatus(collection.Uuids[0]), UNSTARTED)
     // collection.ReadAllMetadata()
     // fmt.Println(collection.Metadatas)
     // collection.ReadAllTimeseriesData()

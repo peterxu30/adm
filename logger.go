@@ -58,23 +58,34 @@ func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
     return logger.put(UUID_BUCKET, uuid, buf)
 }
 
-func (logger *Logger) getUuidStatus(uuid string) string {
-    return string(logger.get(UUID_BUCKET, uuid))
+func (logger *Logger) getUuidStatus(uuid string) LogStatus {
+	var status LogStatus
+	byteAry := logger.get(UUID_BUCKET, uuid)
+	buf := bytes.NewReader(byteAry)
+	err := binary.Read(buf, binary.LittleEndian, &status)
+	if err != nil {
+		fmt.Println("getUuidStatus err: ", err)
+	}
+	return status
+    // return LogStatus(logger.get(UUID_BUCKET, uuid))
 }
 
 func (logger *Logger) get(bucket string, key string) []byte {
     var value []byte
-    byteBucket := convertToByteArray(bucket)
-    keyBucket := convertToByteArray(key)
+    // byteBucket := convertToByteArray(bucket)
+    // keyBucket := convertToByteArray(key)
+    fmt.Println("GET KEY: ", key)
     logger.log.View(func(tx *bolt.Tx) error {
-        b := tx.Bucket(byteBucket)
-        value = b.Get(keyBucket)
+        b := tx.Bucket([]byte(bucket))
+        value = b.Get([]byte(key))
         return nil
     })
+    fmt.Println("GET: ", value)
     return value
 }
 
 func (logger *Logger) put(bucket string, key string, value []byte) error {
+	fmt.Println("LOG PUT", key)
     return logger.log.Update(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
         err := b.Put([]byte(key), value)
