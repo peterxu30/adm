@@ -48,9 +48,37 @@ func newLogger() *Logger {
         return nil
     })
 
-    return &Logger {
-        log: db,
+    logger := Logger {
+    	log: db,
     }
+
+    //check if this is first initialization of read_uuids
+	if logger.get(METADATA_BUCKET, "read_uuids") == nil {
+    	logger.updateLogMetadata("read_uuids", UNSTARTED) //to know whether or not to repull uuids
+    	fmt.Println("read_uuids updated")
+	}
+
+    return &logger
+}
+
+func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
+	buf := convertToByteArray(status)
+	return logger.put(METADATA_BUCKET, key, buf)
+}
+
+func (logger *Logger) getLogMetadata(key string) LogStatus {
+	var status LogStatus
+	byteAry := logger.get(METADATA_BUCKET, key)
+	// if byteAry == nil {
+	// 	fmt.Println("GET LOG METADATA NIL")
+	// 	return UNSTARTED
+	// }
+	buf := bytes.NewReader(byteAry)
+	err := binary.Read(buf, binary.LittleEndian, &status)
+	if err != nil {
+		fmt.Println("getUuidStatus err: ", err)
+	}
+	return status
 }
 
 func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
@@ -67,13 +95,10 @@ func (logger *Logger) getUuidStatus(uuid string) LogStatus {
 		fmt.Println("getUuidStatus err: ", err)
 	}
 	return status
-    // return LogStatus(logger.get(UUID_BUCKET, uuid))
 }
 
 func (logger *Logger) get(bucket string, key string) []byte {
     var value []byte
-    // byteBucket := convertToByteArray(bucket)
-    // keyBucket := convertToByteArray(key)
     fmt.Println("GET KEY: ", key)
     logger.log.View(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
@@ -85,7 +110,7 @@ func (logger *Logger) get(bucket string, key string) []byte {
 }
 
 func (logger *Logger) put(bucket string, key string, value []byte) error {
-	fmt.Println("LOG PUT", key)
+	// fmt.Println("LOG PUT", key)
     return logger.log.Update(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
         err := b.Put([]byte(key), value)

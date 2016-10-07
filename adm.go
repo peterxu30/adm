@@ -78,7 +78,12 @@ func (collection *DataCollection) ReadAllUuids() {
     json.Unmarshal(body, &(collection.Uuids))
 }
 
+/* Uses go routines */
 func (collection *DataCollection) AddAllUuidsToLog() {
+    if collection.Log.getLogMetadata("read_uuids") == WRITE_COMPLETE {
+        fmt.Println("UUID Log write complete")
+        return
+    }
     length := len(collection.Uuids)
     numRoutines := length / 500
     start := 0
@@ -87,6 +92,8 @@ func (collection *DataCollection) AddAllUuidsToLog() {
         numRoutines = 1
         end = length
     }
+
+    collection.Wg.Add(numRoutines)
     for numRoutines > 0 {
         go collection.AddUuidsToLog(start, end)
         start = end
@@ -96,9 +103,13 @@ func (collection *DataCollection) AddAllUuidsToLog() {
         }
         numRoutines--;
     }
+    collection.Wg.Wait()
+    collection.Log.updateLogMetadata("read_uuids", WRITE_COMPLETE)
 }
 
+/* Should only be called as a go routine */
 func (collection *DataCollection) AddUuidsToLog(start int, end int) {
+    defer collection.Wg.Done()
     for i := start; i < end; i++ {
         uuid := collection.Uuids[i]
         collection.Log.updateUuidStatus(uuid, UNSTARTED)
@@ -124,7 +135,6 @@ func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnece
 }
 
 func (collection *DataCollection) WriteAllUuids(dest string) {
-    defer collection.Wg.Done()
     uuidBytes, err := json.Marshal(collection.Uuids)
     if err != nil {
         panic(err)
@@ -136,11 +146,13 @@ func (collection *DataCollection) WriteAllUuids(dest string) {
 }
 
 func (collection *DataCollection) WriteAllMetadata(dest string) {
-    collection.WriteSomeMetadata(dest, 0, len(collection.Uuids))
+    collection.Wg.Add(1)
+    go collection.WriteSomeMetadata(dest, 0, len(collection.Uuids))
 }
 
+/* Should only be called as a go routine */
 func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
-    defer collection.Wg.Done()
+    // defer collection.Wg.Done()
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -166,11 +178,13 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
 }
 
 func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
-    collection.WriteSomeTimeseriesData(dest, 0, len(collection.Uuids))
+    collection.Wg.Add(1)
+    go collection.WriteSomeTimeseriesData(dest, 0, len(collection.Uuids))
 }
 
+/* Should only be called as a go routine */
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
-    defer collection.Wg.Done()
+    // defer collection.Wg.Done()
     fmt.Println("Writing timeseriesdata\n")
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
@@ -182,6 +196,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int
     }
     for i := start; i < end; i++ {
         uuid := collection.Uuids[i]
+
         if i > 0 {
             f.Write([]byte(","))
         }
@@ -194,6 +209,40 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int
         f.Write(body)
     }
     f.Write([]byte("]"))
+}
+
+func (collection *DataCollection) WriteAllDataBlocks(dest string) {
+    //TODO: need to add "[" to front of metadata and timeseries files
+    //TODO: need to add "]" to end of metadata and timeseries files
+}
+
+/* Should only be called as a go routine */
+func (collection *DataCollection) WriteDataBlock(metaDest string, timeseriesDest string, start in, end int) {
+    defer collection.Wg.Done()
+    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic(err)
+    }
+    for i := start; i < end; i++ {
+        uuid := collection.Uuids[i]
+
+        status := collection.Log.getUuidStatus(uuid)
+        if status == UNSTARTED || status == READ_START {
+            collection.Log.updateUuidStatus(uuid, READ_START)
+            //read logic goes here
+            collection.Log.updateUuidStatus(uuid, READ_COMPLETE)
+        }
+
+        status := collection.Log.getUuidStatus(uuid)
+        if status == READ_COMPLETE || status == WRITE_START {
+            collection.Log.updateUuidStatus(uuid, WRITE_START)
+            //write logic goes here
+            WriteSomeMetadata(metaDest, start, end)
+            WriteSomeTimeseriesData(timeseriesDest, start, end)
+            collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
+        }
+    }
+    fmt.Println("Block ", start, " - ", end, " complete")
 }
 
 func makeQuery(url string, queryString string) (uuids []byte) {
@@ -233,10 +282,13 @@ func main() {
     collection := NewDataCollection(Url)
     collection.ReadAllUuids()
     collection.AddAllUuidsToLog()
-    collection.Wg.Add(3)
-    go collection.WriteAllUuids(UuidDestination)
-    go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
-    go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
+    collection.WriteAllUuids(UuidDestination)
+    collection.WriteAllMetadata(MetadataDestination)
+    collection.WriteAllTimeseriesData(TimeseriesDataDestination)
+    // collection.Wg.Add(3)
+    // go collection.WriteAllUuids(UuidDestination)
+    // go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
+    // go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
     collection.Wg.Wait()
     fmt.Println("Done\n")
     fmt.Println(collection.Log.getUuidStatus(collection.Uuids[0]), UNSTARTED)
