@@ -8,7 +8,7 @@ A single go routine reads from this channel and writes the contents to files.
 
 ##Constants
 While a user interface is not yet available, there are a few parameters that are modifiable.
-THese are the constants defined in adm.go.
+These are the constants defined in adm.go.
 
 1. `Url`: The URL to query.
 2. `UuidDestination`: The file to write UUIDs to.
