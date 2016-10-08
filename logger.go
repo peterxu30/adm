@@ -55,7 +55,12 @@ func newLogger() *Logger {
     //check if this is first initialization of read_uuids
 	if logger.get(METADATA_BUCKET, "read_uuids") == nil {
     	logger.updateLogMetadata("read_uuids", UNSTARTED) //to know whether or not to repull uuids
-    	fmt.Println("read_uuids updated")
+    	fmt.Println("read_uuids initialized")
+	}
+
+	if logger.get(METADATA_BUCKET, "write_status") == nil {
+		logger.updateLogMetadata("write_status", UNSTARTED)
+		fmt.Println("write_started initialized")
 	}
 
     return &logger
@@ -92,20 +97,20 @@ func (logger *Logger) getUuidStatus(uuid string) LogStatus {
 	buf := bytes.NewReader(byteAry)
 	err := binary.Read(buf, binary.LittleEndian, &status)
 	if err != nil {
-		fmt.Println("getUuidStatus err: ", err)
+		fmt.Println("getUuidStatus err: ", err, uuid)
 	}
 	return status
 }
 
 func (logger *Logger) get(bucket string, key string) []byte {
     var value []byte
-    fmt.Println("GET KEY: ", key)
+    // fmt.Println("GET KEY: ", key)
     logger.log.View(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
         value = b.Get([]byte(key))
         return nil
     })
-    fmt.Println("GET: ", value)
+    // fmt.Println("GET: ", value)
     return value
 }
 

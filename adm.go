@@ -54,6 +54,12 @@ type CombinedData struct { //final form of data to send out
     Readings interface{}
 }
 
+type UuidTuple struct {
+    Uuid string //for logging
+    Metadata []byte
+    TimeseriesData []byte
+}
+
 type DataCollection struct { //need better name
     Log *Logger
     Wg sync.WaitGroup
@@ -61,12 +67,14 @@ type DataCollection struct { //need better name
 	Uuids []string
     Metadatas [][]Metadata
     TimeseriesDatas [][]TimeseriesData
+    DataChan chan UuidTuple
 }
 
 func NewDataCollection(url string) *DataCollection {
     return &DataCollection {
         Log: newLogger(),
         Url: url,
+        DataChan: make(chan UuidTuple),
         // Uuids: new([]string),
         // Metadatas: new([]Metadata),
         // TimeseriesData: new([]TimeseriesData),
@@ -80,40 +88,51 @@ func (collection *DataCollection) ReadAllUuids() {
 
 /* Uses go routines */
 func (collection *DataCollection) AddAllUuidsToLog() {
+    fmt.Println("addalluuidstolog")
     if collection.Log.getLogMetadata("read_uuids") == WRITE_COMPLETE {
         fmt.Println("UUID Log write complete")
         return
     }
     length := len(collection.Uuids)
-    numRoutines := length / 500
+    numRoutinesFloat := float64(length) / float64(2000)
+    numRoutines := length / 2000
+    if numRoutinesFloat > float64(numRoutines) {
+        numRoutines++
+    }
     start := 0
-    end := 500
+    end := 2000
     if numRoutines == 0 {
         numRoutines = 1
         end = length
     }
-
-    collection.Wg.Add(numRoutines)
+    fmt.Println("Num routines AddAllUuidsToLog", numRoutines)
+    // collection.Wg.Add(numRoutines)
+    var wg sync.WaitGroup
+    wg.Add(numRoutines)
     for numRoutines > 0 {
-        go collection.AddUuidsToLog(start, end)
+        go collection.AddUuidsToLog(start, end, &wg)
         start = end
-        end += 500
+        end += 2000
         if end > length {
             end = length
         }
         numRoutines--;
     }
-    collection.Wg.Wait()
+    // collection.Wg.Wait()
+    wg.Wait()
+    fmt.Println("Read uuids complete")
+    fmt.Println("12000: ", collection.Log.getUuidStatus(collection.Uuids[12000]))
     collection.Log.updateLogMetadata("read_uuids", WRITE_COMPLETE)
 }
 
-/* Should only be called as a go routine */
-func (collection *DataCollection) AddUuidsToLog(start int, end int) {
-    defer collection.Wg.Done()
+/* Called as a go routine */
+func (collection *DataCollection) AddUuidsToLog(start int, end int, wg *sync.WaitGroup) {
+    defer wg.Done()
     for i := start; i < end; i++ {
         uuid := collection.Uuids[i]
         collection.Log.updateUuidStatus(uuid, UNSTARTED)
     }
+    fmt.Println("Uuids ", start, " to ", end, " added to log")
 }
 
 func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
@@ -184,8 +203,8 @@ func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
 
 /* Should only be called as a go routine */
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
-    // defer collection.Wg.Done()
-    fmt.Println("Writing timeseriesdata\n")
+    defer collection.Wg.Done()
+    fmt.Println("Writing timeseriesdata to channel\n")
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -211,39 +230,149 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int
     f.Write([]byte("]"))
 }
 
-func (collection *DataCollection) WriteAllDataBlocks(dest string) {
+func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseriesDest string) {
     //TODO: need to add "[" to front of metadata and timeseries files
     //TODO: need to add "]" to end of metadata and timeseries files
+    defer close(collection.DataChan)
+    length := len(collection.Uuids)
+    numRoutinesFloat := float64(length) / float64(2000)
+    numRoutines := length / 2000
+    if numRoutinesFloat > float64(numRoutines) {
+        numRoutines++
+    }
+    start := 0
+    end := 2000
+    if numRoutines == 0 {
+        numRoutines = 1
+        end = length
+    }
+    collection.Wg.Add(numRoutines)
+    go collection.WriteFromChannel(metaDest, timeseriesDest, collection.DataChan)
+    for numRoutines > 0 {
+        go collection.WriteDataBlock(metaDest, timeseriesDest, start, end) //writes to channel
+        // go routine to WriteFromChannel
+        start = end
+        end += 2000
+        if end > length {
+            end = length
+        }
+        numRoutines--;
+    }
+    collection.Wg.Wait()
+    //close channel here
 }
 
 /* Should only be called as a go routine */
-func (collection *DataCollection) WriteDataBlock(metaDest string, timeseriesDest string, start in, end int) {
+/* CANNOT CONCURRENTLY WRITE TO SAME FILE. USE CHANNELS */
+func (collection *DataCollection) WriteDataBlock(metaDest string, timeseriesDest string, start int, end int) {
     defer collection.Wg.Done()
-    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
-    if err != nil {
-        panic(err)
-    }
+    // f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
+    // if err != nil {
+        // panic(err)
+    // }
     for i := start; i < end; i++ {
         uuid := collection.Uuids[i]
 
         status := collection.Log.getUuidStatus(uuid)
-        if status == UNSTARTED || status == READ_START {
-            collection.Log.updateUuidStatus(uuid, READ_START)
-            //read logic goes here
-            collection.Log.updateUuidStatus(uuid, READ_COMPLETE)
+
+        if status == WRITE_COMPLETE {
+            // fmt.Println("UUID already written")
+            continue
+        }
+        
+        //read into channel
+        mQuery := "select * where uuid='" + uuid + "'"
+        mBody := makeQuery(collection.Url, mQuery)
+
+        tQuery := "select data before now as ns where uuid='" + uuid + "'"
+        tBody := makeQuery(collection.Url, tQuery)
+
+        tuple := UuidTuple {
+            Uuid: uuid,
+            Metadata: mBody,
+            TimeseriesData: tBody,
         }
 
-        status := collection.Log.getUuidStatus(uuid)
-        if status == READ_COMPLETE || status == WRITE_START {
-            collection.Log.updateUuidStatus(uuid, WRITE_START)
-            //write logic goes here
-            WriteSomeMetadata(metaDest, start, end)
-            WriteSomeTimeseriesData(timeseriesDest, start, end)
-            collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
-        }
+        collection.DataChan <- tuple
+
+        // if status == UNSTARTED || status == READ_START {
+        //     collection.Log.updateUuidStatus(uuid, READ_START)
+        //     //read logic goes here
+        //     collection.Log.updateUuidStatus(uuid, READ_COMPLETE)
+        // }
+
+        // status = collection.Log.getUuidStatus(uuid)
+        // if status == READ_COMPLETE || status == WRITE_START {
+        //     collection.Log.updateUuidStatus(uuid, WRITE_START)
+        //     //write logic goes here
+        //     collection.WriteSomeMetadata(metaDest, i, i+1)
+        //     collection.WriteSomeTimeseriesData(timeseriesDest, i, i+1)
+        //     collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
+        // }
     }
-    fmt.Println("Block ", start, " - ", end, " complete")
+    fmt.Println("Block ", start, " - ", end, " read complete")
 }
+
+/* Should only be called once in a go routine 
+ * dest1 - metadata
+ * dest2 - timeseries
+ * Does not check if UUID was already written. This is responsibility of the WriteDataBlock method.
+ */
+func (collection *DataCollection) WriteFromChannel(dest1 string, dest2 string, chnnl chan UuidTuple) {
+    // defer collection.Wg.Done()
+    writeStatus := collection.Log.getLogMetadata("write_status")
+
+    if writeStatus == WRITE_COMPLETE {
+        fmt.Println("Files ", dest1, ", ", dest2, " already written.")
+        return
+    }
+ 
+    if writeStatus == UNSTARTED {
+        err := ioutil.WriteFile(dest1, []byte("["), 0666) //fix this for WAL
+        if err != nil {
+            panic(err)
+        }
+
+        err = ioutil.WriteFile(dest2, []byte("["), 0666) //fix this for WAL
+        if err != nil {
+            panic(err)
+        }
+        collection.Log.updateLogMetadata("write_status", WRITE_START)
+    }
+
+    f1, err := os.OpenFile(dest1, os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic(err)
+    }
+
+    f2, err := os.OpenFile(dest2, os.O_APPEND|os.O_WRONLY, 0666)
+    if err != nil {
+        panic(err)
+    }
+
+    first := true
+    for data := range chnnl {
+        uuid := data.Uuid
+        collection.Log.updateUuidStatus(uuid, WRITE_START)
+
+        metadata := data.Metadata
+        timeseriesdata := data.TimeseriesData
+
+        if !first {
+            f1.Write([]byte(","))
+            f2.Write([]byte(","))
+        }
+        f1.Write(metadata)
+        f2.Write(timeseriesdata)
+        fmt.Println("Write Complete: ", uuid)
+        collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
+    }
+
+    f1.Write([]byte("]")) //fix this for WAL
+    f2.Write([]byte("]")) //fix this for WAL
+    collection.Log.updateLogMetadata("write_status", WRITE_COMPLETE)
+}
+
 
 func makeQuery(url string, queryString string) (uuids []byte) {
 	query := []byte(queryString)
@@ -283,13 +412,14 @@ func main() {
     collection.ReadAllUuids()
     collection.AddAllUuidsToLog()
     collection.WriteAllUuids(UuidDestination)
-    collection.WriteAllMetadata(MetadataDestination)
-    collection.WriteAllTimeseriesData(TimeseriesDataDestination)
+    fmt.Println("UUID Length: ", len(collection.Uuids))
+    collection.WriteAllDataBlocks(MetadataDestination, TimeseriesDataDestination)
+    // collection.WriteAllMetadata(MetadataDestination)
+    // collection.WriteAllTimeseriesData(TimeseriesDataDestination)
     // collection.Wg.Add(3)
     // go collection.WriteAllUuids(UuidDestination)
     // go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
     // go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
-    collection.Wg.Wait()
     fmt.Println("Done\n")
     fmt.Println(collection.Log.getUuidStatus(collection.Uuids[0]), UNSTARTED)
     // collection.ReadAllMetadata()
