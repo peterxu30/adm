@@ -9,17 +9,19 @@ import (
 
 type LogStatus uint8
 
+/* Enums for possible log statuses */
 const (
-    UNSTARTED = iota + 1
-    READ_START
-    READ_COMPLETE
+    UNSTARTED LogStatus = iota + 1
+    READ_START //not used
+    READ_COMPLETE //not used
     WRITE_START
     WRITE_COMPLETE
 )
 
+/* Names of the Bolt buckets */
 const (
-    UUID_BUCKET = "uuid_status"
-    METADATA_BUCKET = "metadata"
+    UUID_BUCKET = "uuid_status" //stores information about each UUID's state
+    METADATA_BUCKET = "metadata" //stores state information about the program
 )
 
 type Logger struct {
@@ -74,10 +76,6 @@ func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
 func (logger *Logger) getLogMetadata(key string) LogStatus {
 	var status LogStatus
 	byteAry := logger.get(METADATA_BUCKET, key)
-	// if byteAry == nil {
-	// 	fmt.Println("GET LOG METADATA NIL")
-	// 	return UNSTARTED
-	// }
 	buf := bytes.NewReader(byteAry)
 	err := binary.Read(buf, binary.LittleEndian, &status)
 	if err != nil {
@@ -102,20 +100,19 @@ func (logger *Logger) getUuidStatus(uuid string) LogStatus {
 	return status
 }
 
+/* Lowest level Logger methods. Should not be called directly. */
 func (logger *Logger) get(bucket string, key string) []byte {
     var value []byte
-    // fmt.Println("GET KEY: ", key)
     logger.log.View(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
         value = b.Get([]byte(key))
         return nil
     })
-    // fmt.Println("GET: ", value)
     return value
 }
 
+/* Lowest level Logger methods. Should not be called directly. */
 func (logger *Logger) put(bucket string, key string, value []byte) error {
-	// fmt.Println("LOG PUT", key)
     return logger.log.Update(func(tx *bolt.Tx) error {
         b := tx.Bucket([]byte(bucket))
         err := b.Put([]byte(key), value)
@@ -123,6 +120,9 @@ func (logger *Logger) put(bucket string, key string, value []byte) error {
     })
 }
 
+/* General purpose function to convert data of type interface to byte array 
+ * Used to convert LogStatus to []byte.
+ */
 func convertToByteArray(data interface{}) []byte {
 	buf := new(bytes.Buffer)
 	err := binary.Write(buf, binary.LittleEndian, data)

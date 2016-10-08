@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-    // "github.com/boltdb/bolt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
     "sync"
-	// "strings"
 )
 
 const (
@@ -18,6 +16,7 @@ const (
     UuidDestination = "uuids.txt"
     MetadataDestination = "metadata.txt"
     TimeseriesDataDestination = "timeseriesdata.txt"
+    ChunkSize = 2000 //amount of UUIDs each go routine processes
 )
 
 type Reader interface { //potentially unnecessary. no point in storing all of this information in memory is there?
@@ -60,13 +59,13 @@ type UuidTuple struct {
     TimeseriesData []byte
 }
 
-type DataCollection struct { //need better name
+type DataCollection struct {
     Log *Logger
     Wg sync.WaitGroup
     Url string
 	Uuids []string
-    Metadatas [][]Metadata
-    TimeseriesDatas [][]TimeseriesData
+    Metadatas [][]Metadata //not used
+    TimeseriesDatas [][]TimeseriesData //not used
     DataChan chan UuidTuple
 }
 
@@ -75,9 +74,6 @@ func NewDataCollection(url string) *DataCollection {
         Log: newLogger(),
         Url: url,
         DataChan: make(chan UuidTuple),
-        // Uuids: new([]string),
-        // Metadatas: new([]Metadata),
-        // TimeseriesData: new([]TimeseriesData),
     }
 }
 
@@ -86,27 +82,27 @@ func (collection *DataCollection) ReadAllUuids() {
     json.Unmarshal(body, &(collection.Uuids))
 }
 
-/* Uses go routines */
+/* Adds all UUIDs from collection.Uuids to the Bolt log.
+ * Uses go routines 
+ */
 func (collection *DataCollection) AddAllUuidsToLog() {
-    fmt.Println("addalluuidstolog")
     if collection.Log.getLogMetadata("read_uuids") == WRITE_COMPLETE {
         fmt.Println("UUID Log write complete")
         return
     }
     length := len(collection.Uuids)
-    numRoutinesFloat := float64(length) / float64(2000)
-    numRoutines := length / 2000
+    numRoutinesFloat := float64(length) / float64(ChunkSize)
+    numRoutines := length / ChunkSize
     if numRoutinesFloat > float64(numRoutines) {
         numRoutines++
     }
     start := 0
-    end := 2000
+    end := ChunkSize
     if numRoutines == 0 {
         numRoutines = 1
         end = length
     }
-    fmt.Println("Num routines AddAllUuidsToLog", numRoutines)
-    // collection.Wg.Add(numRoutines)
+
     var wg sync.WaitGroup
     wg.Add(numRoutines)
     for numRoutines > 0 {
@@ -118,14 +114,13 @@ func (collection *DataCollection) AddAllUuidsToLog() {
         }
         numRoutines--;
     }
-    // collection.Wg.Wait()
+
     wg.Wait()
-    fmt.Println("Read uuids complete")
-    fmt.Println("12000: ", collection.Log.getUuidStatus(collection.Uuids[12000]))
+    fmt.Println("Read uuids to log complete")
     collection.Log.updateLogMetadata("read_uuids", WRITE_COMPLETE)
 }
 
-/* Called as a go routine */
+/* Called as a go routine in AddAllUuidsToLog */
 func (collection *DataCollection) AddUuidsToLog(start int, end int, wg *sync.WaitGroup) {
     defer wg.Done()
     for i := start; i < end; i++ {
@@ -153,6 +148,10 @@ func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnece
     }
 }
 
+/* Writes all UUIDs to the UuidDestination file.
+ * This function is not logged as it is inexpensive. Can be made crash proof if need be.
+ * Maybe remove the arguments and add the information as "instance" attributes?
+ */
 func (collection *DataCollection) WriteAllUuids(dest string) {
     uuidBytes, err := json.Marshal(collection.Uuids)
     if err != nil {
@@ -164,12 +163,16 @@ func (collection *DataCollection) WriteAllUuids(dest string) {
     }
 }
 
+
+/* Not used */
 func (collection *DataCollection) WriteAllMetadata(dest string) {
     collection.Wg.Add(1)
     go collection.WriteSomeMetadata(dest, 0, len(collection.Uuids))
 }
 
-/* Should only be called as a go routine */
+/* Not used.
+ * Should only be called as a go routine 
+ */
 func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
     // defer collection.Wg.Done()
     err := ioutil.WriteFile(dest, []byte("["), 0644)
@@ -196,12 +199,15 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
     f.Write([]byte("]"))
 }
 
+/* Not used */
 func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
     collection.Wg.Add(1)
     go collection.WriteSomeTimeseriesData(dest, 0, len(collection.Uuids))
 }
 
-/* Should only be called as a go routine */
+/* Not used.
+ * Should only be called as a go routine
+ */
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
     defer collection.Wg.Done()
     fmt.Println("Writing timeseriesdata to channel\n")
@@ -230,53 +236,57 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int
     f.Write([]byte("]"))
 }
 
+/* Main method to query and write the metadata and timeseriesdata for all UUIDs to files.
+ * Calls WriteDataBlock in go routines to query metadata and timeseriesdata and write them to a channel.
+ * Calls WriteFromChannel in a go routine to read from the channel and write to file.
+ * More details on the specific operations of these two functions can be found below. 
+ * SIMD parallelization. Go routines are called with a set block of UUIDs to process.
+ */
 func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseriesDest string) {
-    //TODO: need to add "[" to front of metadata and timeseries files
-    //TODO: need to add "]" to end of metadata and timeseries files
-    defer close(collection.DataChan)
+    defer close(collection.DataChan) //close the channel once writes are complete
+
     length := len(collection.Uuids)
-    numRoutinesFloat := float64(length) / float64(2000)
-    numRoutines := length / 2000
+    numRoutinesFloat := float64(length) / float64(ChunkSize)
+    numRoutines := length / ChunkSize
     if numRoutinesFloat > float64(numRoutines) {
         numRoutines++
     }
     start := 0
-    end := 2000
+    end := ChunkSize
     if numRoutines == 0 {
         numRoutines = 1
         end = length
     }
-    collection.Wg.Add(numRoutines)
+
+    var wg sync.WaitGroup
+    wg.Add(numRoutines)
     go collection.WriteFromChannel(metaDest, timeseriesDest, collection.DataChan)
     for numRoutines > 0 {
-        go collection.WriteDataBlock(metaDest, timeseriesDest, start, end) //writes to channel
-        // go routine to WriteFromChannel
+        go collection.WriteDataBlock(start, end, &wg) //writes to channel
         start = end
-        end += 2000
+        end += ChunkSize
         if end > length {
             end = length
         }
         numRoutines--;
     }
-    collection.Wg.Wait()
     //close channel here
+    wg.Wait()
 }
 
-/* Should only be called as a go routine */
-/* CANNOT CONCURRENTLY WRITE TO SAME FILE. USE CHANNELS */
-func (collection *DataCollection) WriteDataBlock(metaDest string, timeseriesDest string, start int, end int) {
-    defer collection.Wg.Done()
-    // f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
-    // if err != nil {
-        // panic(err)
-    // }
+/* Makes queries for all UUIDs within the range of start to end.
+ * Wraps UUID, metadata, and timeseriesdata in a UuidTuple and passes it into the channel.
+ * Checks if each UUID has been written previously.
+ * Should only be called as a go routine.
+ */
+func (collection *DataCollection) WriteDataBlock(start int, end int, wg *sync.WaitGroup) {
+    defer wg.Done()
     for i := start; i < end; i++ {
         uuid := collection.Uuids[i]
 
         status := collection.Log.getUuidStatus(uuid)
 
         if status == WRITE_COMPLETE {
-            // fmt.Println("UUID already written")
             continue
         }
         
@@ -294,32 +304,17 @@ func (collection *DataCollection) WriteDataBlock(metaDest string, timeseriesDest
         }
 
         collection.DataChan <- tuple
-
-        // if status == UNSTARTED || status == READ_START {
-        //     collection.Log.updateUuidStatus(uuid, READ_START)
-        //     //read logic goes here
-        //     collection.Log.updateUuidStatus(uuid, READ_COMPLETE)
-        // }
-
-        // status = collection.Log.getUuidStatus(uuid)
-        // if status == READ_COMPLETE || status == WRITE_START {
-        //     collection.Log.updateUuidStatus(uuid, WRITE_START)
-        //     //write logic goes here
-        //     collection.WriteSomeMetadata(metaDest, i, i+1)
-        //     collection.WriteSomeTimeseriesData(timeseriesDest, i, i+1)
-        //     collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
-        // }
     }
     fmt.Println("Block ", start, " - ", end, " read complete")
 }
 
-/* Should only be called once in a go routine 
+/* Should only be called once in a single go routine 
  * dest1 - metadata
  * dest2 - timeseries
+ * WriteFromChannel reads from the input channel and writes the metadata and timeseriesdata within the UuidTuple to file.
  * Does not check if UUID was already written. This is responsibility of the WriteDataBlock method.
  */
 func (collection *DataCollection) WriteFromChannel(dest1 string, dest2 string, chnnl chan UuidTuple) {
-    // defer collection.Wg.Done()
     writeStatus := collection.Log.getLogMetadata("write_status")
 
     if writeStatus == WRITE_COMPLETE {
@@ -327,13 +322,14 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, dest2 string, c
         return
     }
  
+    // In order to ensure correct JSON format
     if writeStatus == UNSTARTED {
-        err := ioutil.WriteFile(dest1, []byte("["), 0666) //fix this for WAL
+        err := ioutil.WriteFile(dest1, []byte("["), 0666)
         if err != nil {
             panic(err)
         }
 
-        err = ioutil.WriteFile(dest2, []byte("["), 0666) //fix this for WAL
+        err = ioutil.WriteFile(dest2, []byte("["), 0666)
         if err != nil {
             panic(err)
         }
@@ -368,13 +364,18 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, dest2 string, c
         collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
     }
 
+    //TODO: Potential to write too many "]" if crashes here.
     f1.Write([]byte("]")) //fix this for WAL
     f2.Write([]byte("]")) //fix this for WAL
     collection.Log.updateLogMetadata("write_status", WRITE_COMPLETE)
 }
 
-
-func makeQuery(url string, queryString string) (uuids []byte) {
+/* General purpose function to make an HTTP POST request to the specified url
+ * with the specified queryString.
+ * Return value is of type []byte. It is up to the calling function to convert
+ * []byte into the appropriate type.
+ */
+func makeQuery(url string, queryString string) []byte {
 	query := []byte(queryString)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
 	client := &http.Client{}
@@ -388,11 +389,11 @@ func makeQuery(url string, queryString string) (uuids []byte) {
     if err != nil {
         panic(err)
     }
-    // fmt.Println("Query: ", string(body))
     return body
 }
 
-func readMetadataFile(index int) (mdata [][]Metadata) { //for test purposes
+/* For test purposes. Not used. */
+func readMetadataFile(index int) (mdata [][]Metadata) {
     file := "metadata_example.txt"
     dat, err := ioutil.ReadFile(file)
     if err != nil {
@@ -412,128 +413,8 @@ func main() {
     collection.ReadAllUuids()
     collection.AddAllUuidsToLog()
     collection.WriteAllUuids(UuidDestination)
-    fmt.Println("UUID Length: ", len(collection.Uuids))
     collection.WriteAllDataBlocks(MetadataDestination, TimeseriesDataDestination)
-    // collection.WriteAllMetadata(MetadataDestination)
-    // collection.WriteAllTimeseriesData(TimeseriesDataDestination)
-    // collection.Wg.Add(3)
-    // go collection.WriteAllUuids(UuidDestination)
-    // go collection.WriteSomeMetadata(MetadataDestination, 0, 10)
-    // go collection.WriteSomeTimeseriesData(TimeseriesDataDestination, 0, 10)
-    fmt.Println("Done\n")
-    fmt.Println(collection.Log.getUuidStatus(collection.Uuids[0]), UNSTARTED)
-    // collection.ReadAllMetadata()
-    // fmt.Println(collection.Metadatas)
-    // collection.ReadAllTimeseriesData()
-    // fmt.Println(collection.TimeseriesDatas)
-    // body := makeQuery(Url, "select data before now as ns where uuid='79fc7217-7795-58d0-8deb-e2353f88b4f8'")// where uuid='62710721-5135-56d5-8d38-f1d3e9f87f70'")
-    // ioutil.WriteFile("data_example.txt", body, 0644)
-
-    // timedata := new([]TimeseriesData)
-    // json.Unmarshal(body, &timedata)
-    // fmt.Println("TIME DATA: ", (*timedata)[0].Readings.([]interface{})[0].([]interface{})[0]) //accessing data point 1, value 1
-	//log uuids
- //    fmt.Println("Recording UUIDs")
-	// uuidByte := makeQuery(Url, "select distinct uuid")
-	// ioutil.WriteFile("uuids1.txt", uuidByte, 0644)
-
- //    var uuids []string
- //    json.Unmarshal(uuidByte, &uuids)
- //    length := strconv.Itoa(len(uuids))
- //    fmt.Println("Recording metadata: " + length + " files to process")
- //    ioutil.WriteFile("metadata_example.txt", []byte("["), 0644)
- //    f, _ := os.OpenFile("metadata_example.txt", os.O_APPEND|os.O_WRONLY, 0666)
- //    for i, uuid := range uuids {
- //        if i < 100 {
- //        if i > 0 {
- //            f.Write([]byte(","))
- //        }
- //        if i % 50 == 0 {
- //            length1 := strconv.Itoa(i)
- //            fmt.Println(length1 + " files processed.")
- //        }
- //        query := "select * where uuid='" + uuid + "'"
- //        mbody := makeQuery(Url, query)
- //        f.Write(mbody)
- //        }
- //    }
- //    f.Write([]byte("]"))
-    // readMetadataFile(0)
-
-
-	// body := makeQuery(Url, "select * where uuid='8aa76954-d33d-5a03-93b1-cd07a67aa7ff'")
-
-    // var ids []string
-    // var a [2]json.RawMessage
-    // var a = new(interface{})
-    // var a interface{}
-    // json.Unmarshal(body, &ids)
-    // metadata2test := new([]map[string]interface{})
-    // mdata := new([]Metadata)
-    // dec := json.NewDecoder(bytes.NewBuffer(body))
-    // if err := dec.Decode(&mdata); err != nil {
-        // return fmt.Errorf("decode person: %v", err)
-        // fmt.Println(err)
-    // }
-
-    // Once decoded we can access the fields by name.
-    // fmt.Println("TEST: ", (*mdata)[0].Path)
-    // fmt.Println("TEST: ", (*mdata)[0].Uuid)
-    // fmt.Println("TEST: ", (*mdata)[0].Properties)//["UnitofTime"]) need to cast Properties.(map[string]interface{}) to access
-    // fmt.Println("TEST: ", (*mdata)[0].Metadata)
-
-    // json.Unmarshal(body, &mdata)
-    // fmt.Println(mdata)
-    // json.Unmarshal(body, &a[0])
-    // fmt.Println(string(a[0]))
-    // fmt.Println(ids)
-    // newJson := new(Metadata)
-    // newJson.Uuid = "8aa76954-d33d-5a03-93b1-cd07a67aa7ff"
-    // newJson.Data = string(a[0][1:len(a[0])-1])
-    // fmt.Println("New Json: ", newJson)
-    // bits, _ := json.Marshal(newJson)
-    // testJson := new(Metadata)
-    // json.Unmarshal(bits, testJson)
-    // fmt.Println("Test json: ", testJson.Data)
-    // // ioutil.WriteFile("metadata_example.txt", bits, 0644)
-    // f, _ := os.OpenFile("metadata_example.txt", os.O_APPEND|os.O_WRONLY, 0666)
-    // f.Write(bits)
-    // f.Write([]byte("]"))
-/////////
-//     query = []byte("select * where uuid='042f56d4-37f8-5d85-a2c1-c3e5aebf94ff'") //metadata retrieval
-// 	req, err = http.NewRequest("POST", url, bytes.NewBuffer(query))
-
-// 	// client = &http.Client{}
-//     resp, err = client.Do(req)
-//     if err != nil {
-//         panic(err)
-//     }
-
-//     defer resp.Body.Close()
-//     fmt.Println("response Status:", resp.Status)
-//     fmt.Println("response Headers:", resp.Header)
-//     body1, _ := ioutil.ReadAll(resp.Body)
-//  //   	// ids = []string
-//     // json.Unmarshal(body1, &ids)
-//     json.Unmarshal(body1, &a[1])
-//     // fmt.Println(string(a[1]))
-//     newJson = new(Metadata)
-//     newJson.Uuid = "042f56d4-37f8-5d85-a2c1-c3e5aebf94ff"
-//     newJson.Data = string(a[1][1:len(a[1])-1])
-//     bits, err = json.Marshal(newJson)
-//     testJson = new(Metadata)
-//     json.Unmarshal(bits, testJson)
-//     fmt.Println("Test json: ", testJson.Data)
-//     // fmt.Println(ids)
-//     // ioutil.WriteFile("metadata_example.txt", body, 0644)
-//     // f, err := os.OpenFile("metadata_example.txt", os.O_APPEND|os.O_WRONLY, 0666)
-//     // f.Write(bits)
-
-
-
-// //////////test read
-//     shit, err := ioutil.ReadFile("metadata_example.txt")
-//     aa := new(Metadata)
-//     json.Unmarshal(shit, &aa)
-//     fmt.Println("Hello, ", aa.Uuid)
+    fmt.Println("Number of UUIDs: ", len(collection.Uuids))
+    fmt.Println("Migration complete.")
+    // fmt.Println(collection.Log.getUuidStatus(collection.Uuids[0]), UNSTARTED)
 }
