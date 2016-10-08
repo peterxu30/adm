@@ -61,7 +61,6 @@ type UuidTuple struct {
 
 type DataCollection struct {
 	Log             *Logger
-	Wg              sync.WaitGroup
 	Url             string
 	Uuids           []string
 	Metadatas       [][]Metadata       //not used
@@ -130,6 +129,7 @@ func (collection *DataCollection) AddUuidsToLog(start int, end int, wg *sync.Wai
 	fmt.Println("Uuids ", start, " to ", end, " added to log")
 }
 
+/* Writes metadata to memory. No real purpose */
 func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
 	collection.Metadatas = make([][]Metadata, len(collection.Uuids))
 	for i, uuid := range collection.Uuids {
@@ -139,6 +139,7 @@ func (collection *DataCollection) ReadAllMetadata() { //potentially unnecessary
 	}
 }
 
+/* Writes timeseriesdata to memory. No real purpose */
 func (collection *DataCollection) ReadAllTimeseriesData() { //potentially unnecessary
 	collection.TimeseriesDatas = make([][]TimeseriesData, len(collection.Uuids))
 	for i, uuid := range collection.Uuids {
@@ -161,78 +162,6 @@ func (collection *DataCollection) WriteAllUuids(dest string) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-/* Not used */
-func (collection *DataCollection) WriteAllMetadata(dest string) {
-	collection.Wg.Add(1)
-	go collection.WriteSomeMetadata(dest, 0, len(collection.Uuids))
-}
-
-/* Not used.
- * Should only be called as a go routine
- */
-func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end int) {
-	// defer collection.Wg.Done()
-	err := ioutil.WriteFile(dest, []byte("["), 0644)
-	if err != nil {
-		panic(err)
-	}
-	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		panic(err)
-	}
-	for i := start; i < end; i++ {
-		uuid := collection.Uuids[i]
-		if i > 0 {
-			f.Write([]byte(","))
-		}
-		if i%50 == 0 {
-			length := strconv.Itoa(i)
-			fmt.Println(length + " ids processed.")
-		}
-		query := "select * where uuid='" + uuid + "'"
-		body := makeQuery(collection.Url, query)
-		f.Write(body)
-	}
-	f.Write([]byte("]"))
-}
-
-/* Not used */
-func (collection *DataCollection) WriteAllTimeseriesData(dest string) {
-	collection.Wg.Add(1)
-	go collection.WriteSomeTimeseriesData(dest, 0, len(collection.Uuids))
-}
-
-/* Not used.
- * Should only be called as a go routine
- */
-func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start int, end int) {
-	defer collection.Wg.Done()
-	fmt.Println("Writing timeseriesdata to channel\n")
-	err := ioutil.WriteFile(dest, []byte("["), 0644)
-	if err != nil {
-		panic(err)
-	}
-	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0666)
-	if err != nil {
-		panic(err)
-	}
-	for i := start; i < end; i++ {
-		uuid := collection.Uuids[i]
-
-		if i > 0 {
-			f.Write([]byte(","))
-		}
-		if i%50 == 0 {
-			length := strconv.Itoa(i)
-			fmt.Println(length + " ids processed.")
-		}
-		query := "select data before now as ns where uuid='" + uuid + "'"
-		body := makeQuery(collection.Url, query)
-		f.Write(body)
-	}
-	f.Write([]byte("]"))
 }
 
 /* Main method to query and write the metadata and timeseriesdata for all UUIDs to files.
