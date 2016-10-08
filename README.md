@@ -4,7 +4,7 @@ For Software Defined Buildings
 
 ##Program Flow
 adm uses several Go routines to simultaneously query the specified URL and writes the output to a Go channel.
-A single go routine reads from this channel and writes the contents to files.
+A single Go routine reads from this channel and writes the contents to files.
 
 ##How to Run
 1. Clone the repo.
