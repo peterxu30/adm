@@ -8,7 +8,7 @@ A single go routine reads from this channel and writes the contents to files.
 
 ##How to Run
 1. Clone the repo.
-2. Download Bolt: go get https://github.com/boltdb/bolt`
+2. Download Bolt: `go get https://github.com/boltdb/bolt`
 3. Build adm: `go build`
 4. Run adm: `./adm`
 
