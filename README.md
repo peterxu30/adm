@@ -24,3 +24,6 @@ These are the constants defined in adm.go.
 
 ##Required Libraries
 1. [Bolt](https://github.com/boltdb/bolt)
+
+##Potential Future Improvements
+1. Decouple the reading/writing of metadata and timeseries data. The code as it stands was written under the assumption that the eventual writing to target database was a single process that wrote both types of data at once for a given UUID. However, if it proves to be more efficient to write metadata directly to the metadata database and timeseries data to the timeseries database, then separating the logic into different asynchronous methods is worth looking into.
