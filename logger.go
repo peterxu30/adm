@@ -11,53 +11,53 @@ type LogStatus uint8
 
 /* Enums for possible log statuses */
 const (
-    UNSTARTED LogStatus = iota + 1
-    READ_START //not used
-    READ_COMPLETE //not used
-    WRITE_START
-    WRITE_COMPLETE
+	UNSTARTED     LogStatus = iota + 1
+	READ_START              //not used
+	READ_COMPLETE           //not used
+	WRITE_START
+	WRITE_COMPLETE
 )
 
 /* Names of the Bolt buckets */
 const (
-    UUID_BUCKET = "uuid_status" //stores information about each UUID's state
-    METADATA_BUCKET = "metadata" //stores state information about the program
+	UUID_BUCKET     = "uuid_status" //stores information about each UUID's state
+	METADATA_BUCKET = "metadata"    //stores state information about the program
 )
 
 type Logger struct {
-    log *bolt.DB
+	log *bolt.DB
 }
 
 func newLogger() *Logger {
-    db, err := bolt.Open("adm.db", 0600, nil)
-    if err != nil {
-        panic(err)
-    }
+	db, err := bolt.Open("adm.db", 0600, nil)
+	if err != nil {
+		panic(err)
+	}
 
-    db.Update(func(tx *bolt.Tx) error {
-        _, err := tx.CreateBucketIfNotExists([]byte("uuid_status"))
-        if err != nil {
-            return fmt.Errorf("create bucket: %s", err)
-        }
-        return nil
-    })
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("uuid_status"))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
 
-    db.Update(func(tx *bolt.Tx) error {
-        _, err := tx.CreateBucketIfNotExists([]byte("metadata"))
-        if err != nil {
-            return fmt.Errorf("create bucket: %s", err)
-        }
-        return nil
-    })
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("metadata"))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
 
-    logger := Logger {
-    	log: db,
-    }
+	logger := Logger{
+		log: db,
+	}
 
-    //check if this is first initialization of read_uuids
+	//check if this is first initialization of read_uuids
 	if logger.get(METADATA_BUCKET, "read_uuids") == nil {
-    	logger.updateLogMetadata("read_uuids", UNSTARTED) //to know whether or not to repull uuids
-    	fmt.Println("read_uuids initialized")
+		logger.updateLogMetadata("read_uuids", UNSTARTED) //to know whether or not to repull uuids
+		fmt.Println("read_uuids initialized")
 	}
 
 	if logger.get(METADATA_BUCKET, "write_status") == nil {
@@ -65,7 +65,7 @@ func newLogger() *Logger {
 		fmt.Println("write_started initialized")
 	}
 
-    return &logger
+	return &logger
 }
 
 func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
@@ -86,7 +86,7 @@ func (logger *Logger) getLogMetadata(key string) LogStatus {
 
 func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
 	buf := convertToByteArray(status)
-    return logger.put(UUID_BUCKET, uuid, buf)
+	return logger.put(UUID_BUCKET, uuid, buf)
 }
 
 func (logger *Logger) getUuidStatus(uuid string) LogStatus {
@@ -102,25 +102,25 @@ func (logger *Logger) getUuidStatus(uuid string) LogStatus {
 
 /* Lowest level Logger methods. Should not be called directly. */
 func (logger *Logger) get(bucket string, key string) []byte {
-    var value []byte
-    logger.log.View(func(tx *bolt.Tx) error {
-        b := tx.Bucket([]byte(bucket))
-        value = b.Get([]byte(key))
-        return nil
-    })
-    return value
+	var value []byte
+	logger.log.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		value = b.Get([]byte(key))
+		return nil
+	})
+	return value
 }
 
 /* Lowest level Logger methods. Should not be called directly. */
 func (logger *Logger) put(bucket string, key string, value []byte) error {
-    return logger.log.Update(func(tx *bolt.Tx) error {
-        b := tx.Bucket([]byte(bucket))
-        err := b.Put([]byte(key), value)
-        return err
-    })
+	return logger.log.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		err := b.Put([]byte(key), value)
+		return err
+	})
 }
 
-/* General purpose function to convert data of type interface to byte array 
+/* General purpose function to convert data of type interface to byte array
  * Used to convert LogStatus to []byte.
  */
 func convertToByteArray(data interface{}) []byte {
