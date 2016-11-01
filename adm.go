@@ -187,10 +187,12 @@ func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseries
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(numRoutines)
+	wg.Add(numRoutines + 1)
 	go collection.WriteFromChannel(metaDest, collection.DataChan)
+    go collection.WriteDataBlock(0, length, &wg)
 	for numRoutines > 0 {
-		go collection.WriteDataBlock(start, end, &wg) //writes to channel
+		// go collection.WriteDataBlock(start, end, &wg) //writes to channel
+        go collection.NewWriteDataBlock(start, end, &wg)
 		start = end
 		end += ChunkSize
 		if end > length {
@@ -208,13 +210,16 @@ type WindowData struct {
 }
 
 func (collection *DataCollection) getAllWindowData() []*WindowData {
+    fmt.Println("get all window data")
     return collection.getSomeWindowData(0, len(collection.Uuids))
 }
 
 func (collection *DataCollection) getSomeWindowData(start int, end int) []*WindowData {
+    fmt.Println("some window data: ", start, end)
     windows := make([]*WindowData, end-start)
     for i := start; i < end; i++ {
-        windows[i] = collection.getWindowData(collection.Uuids[i])
+        // fmt.Println("Get some window data: ", i)
+        windows[i-start] = collection.getWindowData(collection.Uuids[i])
     }
     return windows
 }
@@ -228,7 +233,7 @@ func (collection *DataCollection) getWindowData(uuid string) *WindowData {
     var windows [1]WindowData
     json.Unmarshal(body, &windows) //check error
     window := windows[0]
-    fmt.Println("WINDOW:", window)
+    // fmt.Println("WINDOW:", window)
     fmt.Println("WINDOW", string(body))
     return &window
 }
@@ -242,12 +247,12 @@ type TimeSlot struct {
 func (window *WindowData) getTimeSlots() []*TimeSlot {
     var slots = make([]*TimeSlot, len(window.Readings))
     count := 0
-    fmt.Println(window)
+    fmt.Println("getTimeSlots window:", window)
     for _, reading := range window.Readings {
         if len(reading) < 0 {
             continue
         }
-        fmt.Println(reading)
+        fmt.Println("getTimeSlots reading:", reading)
         var slot TimeSlot = TimeSlot {
             Uuid: window.Uuid,
             Timestamp: reading[0],
@@ -259,15 +264,11 @@ func (window *WindowData) getTimeSlots() []*TimeSlot {
     return slots
 }
 
-type WriteWindow struct {
-    Start *TimeSlot
-    WholeUuids []string
-    End *TimeSlot
-}
-
 func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync.WaitGroup) {
     defer wg.Done()
+    fmt.Println("Getting some windows")
     windowData := collection.getSomeWindowData(start, end)
+    fmt.Println("Got some windows")
     completeUuidsToWrite := make([]string, end-start)
     completeUuidsIndex := 0
     fileCount := 0
@@ -276,8 +277,14 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
         return
     }
     firstWindow := windowData[0]
-    firstTimeSlots := firstWindow.getTimeSlots()
-    startTimeSlot := firstTimeSlots[0]
+    fmt.Println("Got first window", firstWindow)
+    // firstTimeSlots := firstWindow.getTimeSlots()
+    // if (len(firstTimeSlots == 0))
+    var startTimeSlot *TimeSlot = &TimeSlot {
+        Uuid: firstWindow.Uuid,
+        Timestamp: 0,
+        Count: 0,
+    }
     var endTimeSlot *TimeSlot
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
@@ -288,11 +295,6 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
             if currentSize >= FileSize { //convert to memory size check later
                 innerWg.Add(1)
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
-                // var writeWindow WriteWindow = WriteWindow {
-                //     Start: &startTimeSlot,
-                //     WholeUuids: completeUuidsToWrite[:completeUuidsIndex],
-                //     End: &endTimeSlot,
-                // }
                 //go write timeseries
                 fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid)
                 go collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
@@ -303,6 +305,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 startTimeSlot = timeSlot
                 fileCount++
             }
+            currentSize += timeSlot.Count
         }
         completeUuidsToWrite[completeUuidsIndex] = window.Uuid
         completeUuidsIndex++
@@ -353,6 +356,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
     //write timeslot start
     startQuery := "select data in (" + strconv.Itoa(start.Timestamp) + ", now) as ns where uuid='" + start.Uuid + "'"
+    fmt.Println("START QUERY: " + startQuery)
     startBody := makeQuery(collection.Url, startQuery)
     f.Write(startBody)    
 
@@ -466,7 +470,7 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 		}
 		f1.Write(metadata)
 		// f2.Write(timeseriesdata)
-		fmt.Println("Write Complete: ", uuid)
+		// fmt.Println("Write Complete: ", uuid)
 		collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
 	}
 
@@ -486,15 +490,22 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 func makeQuery(url string, queryString string) []byte {
 	query := []byte(queryString)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
+    if err != nil {
+        fmt.Println("panic 1")
+        panic(err)
+    }
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+        fmt.Println("panic 2")
 		panic(err)
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+        fmt.Println("panic 3")
 		panic(err)
 	}
 	return body
