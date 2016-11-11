@@ -276,7 +276,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     if (len(windowData) == 0) {
         return
     }
-    firstWindow := windowData[0]
+    // firstWindow := wigndowData[0]
     // fmt.Println("Got first window", firstWindow)
     // firstTimeSlots := firstWindow.getTimeSlots()
     // if (len(firstTimeSlots == 0))
@@ -287,7 +287,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     //     Count: 0,
     // }
     var startTimeSlot *TimeSlot = nil
-    var endTimeSlot *timeSlot = nil
+    var endTimeSlot *TimeSlot = nil
     fmt.Println("About to find a chunk to write")
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
@@ -389,11 +389,16 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
 
     //write timeslot end
-    f.Write([]byte(","))
-    endQuery := "select data in (0, " + strconv.Itoa(end.Timestamp) + ") as ns where uuid='" + end.Uuid + "'"
-    fmt.Println("END QUERY: " + endQuery)
-    endBody := makeQuery(collection.Url, endQuery)
-    f.Write(endBody)
+    if (end != nil) {
+        f.Write([]byte(","))
+        endQuery := "select data in (0, " + strconv.Itoa(end.Timestamp) + ") as ns where uuid='" + end.Uuid + "'"
+        fmt.Println("END QUERY: " + endQuery)
+        endBody := makeQuery(collection.Url, endQuery)
+        f.Write(endBody)
+    } else {
+        fmt.Println("No end slot")
+    }
+    
     f.Write([]byte("]"))
     f.Close()
     fmt.Println("Wrote " + strconv.Itoa(1 + len(fullUuids)) + " uuids")
