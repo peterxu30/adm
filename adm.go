@@ -276,7 +276,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     if (len(windowData) == 0) {
         return
     }
-    // firstWindow := wigndowData[0]
+    // firstWindow := windowData[0]
     // fmt.Println("Got first window", firstWindow)
     // firstTimeSlots := firstWindow.getTimeSlots()
     // if (len(firstTimeSlots == 0))
@@ -292,12 +292,13 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
         fmt.Println("Current size: " + strconv.Itoa(currentSize))
-        startTimeSlot = nil
-        endTimeSlot = nil
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
+        startTimeSlot = timeSlots[0]
+        endTimeSlot = nil
+        var prevTimeSlot *TimeSlot = nil
         for _, timeSlot := range timeSlots {
-            endTimeSlot = timeSlot
+            endTimeSlot = prevTimeSlot
             if currentSize >= FileSize { //convert to memory size check later
                 innerWg.Add(1)
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
@@ -312,6 +313,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 fileCount++
             }
             currentSize += timeSlot.Count
+            prevTimeSlot = timeSlot
         }
         // completeUuidsToWrite[completeUuidsIndex] = window.Uuid
         completeUuidsToWrite = append(completeUuidsToWrite, window.Uuid)
@@ -398,7 +400,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     } else {
         fmt.Println("No end slot")
     }
-    
+
     f.Write([]byte("]"))
     f.Close()
     fmt.Println("Wrote " + strconv.Itoa(1 + len(fullUuids)) + " uuids")
