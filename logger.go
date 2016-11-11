@@ -21,6 +21,8 @@ const (
 /* Names of the Bolt buckets */
 const (
 	UUID_BUCKET     = "uuid_status" //stores information about each UUID's state
+	// UUID_METADATA_BUCKET = "uuid_m_status"
+	// UUID_TIMESERIES_BUCKET = "uuid_t_status"
 	METADATA_BUCKET = "metadata"    //stores state information about the program
 )
 

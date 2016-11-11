@@ -17,7 +17,7 @@ const (
 	MetadataDestination       = "metadata.txt"
 	TimeseriesDataDestination = "timeseriesdata.txt"
 	ChunkSize                 = 2000 //amount of UUIDs each go routine processes
-    FileSize = 10000 //amount of records in each timeseries file
+    FileSize = 10000000 //amount of records in each timeseries file
 )
 
 type Reader interface { //potentially unnecessary. no point in storing all of this information in memory is there?
@@ -234,7 +234,7 @@ func (collection *DataCollection) getWindowData(uuid string) *WindowData {
     json.Unmarshal(body, &windows) //check error
     window := windows[0]
     // fmt.Println("WINDOW:", window)
-    fmt.Println("WINDOW", string(body))
+    // fmt.Println("WINDOW", string(body))
     return &window
 }
 
@@ -247,12 +247,12 @@ type TimeSlot struct {
 func (window *WindowData) getTimeSlots() []*TimeSlot {
     var slots = make([]*TimeSlot, len(window.Readings))
     count := 0
-    fmt.Println("getTimeSlots window:", window)
+    // fmt.Println("getTimeSlots window:", window)
     for _, reading := range window.Readings {
         if len(reading) < 0 {
             continue
         }
-        fmt.Println("getTimeSlots reading:", reading)
+        // fmt.Println("getTimeSlots reading:", reading)
         var slot TimeSlot = TimeSlot {
             Uuid: window.Uuid,
             Timestamp: reading[0],
@@ -269,7 +269,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     fmt.Println("Getting some windows")
     windowData := collection.getSomeWindowData(start, end)
     fmt.Println("Got some windows")
-    completeUuidsToWrite := make([]string, end-start)
+    completeUuidsToWrite := make([]string, 0, end-start)
     completeUuidsIndex := 0
     fileCount := 0
     currentSize := 0
@@ -277,17 +277,23 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
         return
     }
     firstWindow := windowData[0]
-    fmt.Println("Got first window", firstWindow)
+    // fmt.Println("Got first window", firstWindow)
     // firstTimeSlots := firstWindow.getTimeSlots()
     // if (len(firstTimeSlots == 0))
-    var startTimeSlot *TimeSlot = &TimeSlot {
-        Uuid: firstWindow.Uuid,
-        Timestamp: 0,
-        Count: 0,
-    }
-    var endTimeSlot *TimeSlot
+
+    // var startTimeSlot *TimeSlot = &TimeSlot {
+    //     Uuid: firstWindow.Uuid,
+    //     Timestamp: 0,
+    //     Count: 0,
+    // }
+    var startTimeSlot *TimeSlot = nil
+    var endTimeSlot *timeSlot = nil
+    fmt.Println("About to find a chunk to write")
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
+        fmt.Println("Current size: " + strconv.Itoa(currentSize))
+        startTimeSlot = nil
+        endTimeSlot = nil
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         for _, timeSlot := range timeSlots {
@@ -296,10 +302,10 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 innerWg.Add(1)
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
                 //go write timeseries
-                fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid)
-                go collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
+                fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid + " size: " + strconv.Itoa(currentSize))
+                collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
                 //go write metadata probably don't need to split up metadata as much as timeseries data.
-                completeUuidsToWrite = make([]string, end-start)//clear the array
+                completeUuidsToWrite = make([]string, 0, end-start)//clear the array
                 completeUuidsIndex = 0
                 currentSize = 0
                 startTimeSlot = timeSlot
@@ -307,10 +313,11 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
             }
             currentSize += timeSlot.Count
         }
-        completeUuidsToWrite[completeUuidsIndex] = window.Uuid
+        // completeUuidsToWrite[completeUuidsIndex] = window.Uuid
+        completeUuidsToWrite = append(completeUuidsToWrite, window.Uuid)
         completeUuidsIndex++
     }
-    innerWg.Wait()
+    // innerWg.Wait()
 }
 
 /* UNUSED */
@@ -338,6 +345,7 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
         f.Write(body)
     }
     f.Write([]byte("]"))
+    f.Close()
 }
  
  /* Used
@@ -345,7 +353,7 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
   */
 func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *TimeSlot, fullUuids []string, end *TimeSlot, wg *sync.WaitGroup) {
     defer wg.Done()
-    fmt.Println("Writing timeseriesdata to channel\n")
+    fmt.Println("Writing timeseriesdata\n")
     err := ioutil.WriteFile(dest, []byte("["), 0644)
     if err != nil {
         panic(err)
@@ -355,10 +363,15 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         panic(err)
     }
     //write timeslot start
-    startQuery := "select data in (" + strconv.Itoa(start.Timestamp) + ", now) as ns where uuid='" + start.Uuid + "'"
-    fmt.Println("START QUERY: " + startQuery)
-    startBody := makeQuery(collection.Url, startQuery)
-    f.Write(startBody)    
+    if start != nil {
+        startQuery := "select data in (" + strconv.Itoa(start.Timestamp) + ", now) as ns where uuid='" + start.Uuid + "'"
+        fmt.Println("START QUERY: " + startQuery)
+        startBody := makeQuery(collection.Url, startQuery)
+        f.Write(startBody)  
+    } else {
+        fmt.Println("No start query")
+    }
+      
 
     for i, uuid := range fullUuids {
         // uuid := collection.Uuids[i]
@@ -377,10 +390,13 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
 
     //write timeslot end
     f.Write([]byte(","))
-    endQuery := "select data in (0, " + strconv.Itoa(start.Timestamp) + ") as ns where uuid='" + end.Uuid + "'"
+    endQuery := "select data in (0, " + strconv.Itoa(end.Timestamp) + ") as ns where uuid='" + end.Uuid + "'"
+    fmt.Println("END QUERY: " + endQuery)
     endBody := makeQuery(collection.Url, endQuery)
     f.Write(endBody)
     f.Write([]byte("]"))
+    f.Close()
+    fmt.Println("Wrote " + strconv.Itoa(1 + len(fullUuids)) + " uuids")
  }
 
 /* Makes queries for all UUIDs within the range of start to end.
