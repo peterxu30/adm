@@ -294,16 +294,26 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
         fmt.Println("Current size: " + strconv.Itoa(currentSize))
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
+        if (len(timeSlots) == 0) {
+            continue;
+        }
         startTimeSlot = timeSlots[0]
         endTimeSlot = nil
-        var prevTimeSlot *TimeSlot = nil
         for _, timeSlot := range timeSlots {
-            endTimeSlot = prevTimeSlot
+            if timeSlot.Count == 0 {
+                continue
+            }
             if currentSize >= FileSize { //convert to memory size check later
                 innerWg.Add(1)
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
                 //go write timeseries
-                fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid + " size: " + strconv.Itoa(currentSize))
+                // fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid + " size: " + strconv.Itoa(currentSize))
+                if (startTimeSlot == endTimeSlot) {
+                    endTimeSlot = nil
+                }
+                if (len(completeUuidsToWrite) > 0 && completeUuidsToWrite[0] == startTimeSlot.Uuid) {
+                    startTimeSlot = nil
+                }
                 collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
                 //go write metadata probably don't need to split up metadata as much as timeseries data.
                 completeUuidsToWrite = make([]string, 0, end-start)//clear the array
@@ -313,7 +323,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 fileCount++
             }
             currentSize += timeSlot.Count
-            prevTimeSlot = timeSlot
+            endTimeSlot = timeSlot
         }
         // completeUuidsToWrite[completeUuidsIndex] = window.Uuid
         completeUuidsToWrite = append(completeUuidsToWrite, window.Uuid)
