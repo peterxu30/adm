@@ -314,6 +314,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 if (len(completeUuidsToWrite) > 0 && completeUuidsToWrite[0] == startTimeSlot.Uuid) {
                     startTimeSlot = nil
                 }
+                fmt.Println("Writing timeseries data for ", startTimeSlot, " to ", endTimeSlot)
                 collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
                 //go write metadata probably don't need to split up metadata as much as timeseries data.
                 completeUuidsToWrite = make([]string, 0, end-start)//clear the array
@@ -388,9 +389,8 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     for i, uuid := range fullUuids {
         // uuid := collection.Uuids[i]
  
-        // if i > 0 {
         f.Write([]byte(","))
-        // }
+
         if i%50 == 0 {
             length := strconv.Itoa(i)
             fmt.Println(length + " ids processed.")
@@ -408,7 +408,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         endBody := makeQuery(collection.Url, endQuery)
         f.Write(endBody)
     } else {
-        fmt.Println("No end slot")
+        fmt.Println("No end query")
     }
 
     f.Write([]byte("]"))
