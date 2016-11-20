@@ -18,6 +18,7 @@ const (
 	TimeseriesDataDestination = "timeseriesdata.txt"
 	ChunkSize                 = 2000 //amount of UUIDs each go routine processes
     FileSize = 10000000 //amount of records in each timeseries file
+    YearNS = 31536000000000000
 )
 
 type Reader interface { //potentially unnecessary. no point in storing all of this information in memory is there?
@@ -206,7 +207,7 @@ func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseries
 
 type WindowData struct {
     Uuid string `json:"uuid"`
-    Readings [][]int
+    Readings [][]uint64
 }
 
 func (collection *DataCollection) getAllWindowData() []*WindowData {
@@ -240,27 +241,48 @@ func (collection *DataCollection) getWindowData(uuid string) *WindowData {
 
 type TimeSlot struct {
     Uuid string
-    Timestamp int
+    StartTime uint64
+    EndTime uint64
     Count int
 }
 
 func (window *WindowData) getTimeSlots() []*TimeSlot {
     var slots = make([]*TimeSlot, len(window.Readings))
-    count := 0
     // fmt.Println("getTimeSlots window:", window)
-    for _, reading := range window.Readings {
-        if len(reading) < 0 {
-            continue
+    length := len(window.Readings)
+    for i := 0; i < length; i++ {
+        reading := window.Readings[i]
+        startTime := reading[0]
+        endTime := -1 //means end time is now
+        if i < length - 1 {
+            endTime = window.Readings[i + 1][0]
         }
-        // fmt.Println("getTimeSlots reading:", reading)
+
         var slot TimeSlot = TimeSlot {
             Uuid: window.Uuid,
-            Timestamp: reading[0],
-            Count: reading[1],
+            StartTime: startTime,
+            EndTime: endTime,
+            Count: int(reading[1]),
         }
-        slots[count] = &slot
-        count++
+        slots[i] = &slot
     }
+
+
+    // for _, reading := range window.Readings {
+    //     if len(reading) < 0 {
+    //         continue
+    //     }
+    //     fmt.Println("TimeSlot: ", reading)
+    //     // fmt.Println("getTimeSlots reading:", reading)
+    //     var slot TimeSlot = TimeSlot {
+    //         Uuid: window.Uuid,
+    //         StartTime: reading[0],
+    //         EndTime: reading[0] + YearNS,
+    //         Count: int(reading[1]),
+    //     }
+    //     slots[count] = &slot
+    //     count++
+    // }
     return slots
 }
 
@@ -291,7 +313,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     fmt.Println("About to find a chunk to write")
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
-        fmt.Println("Current size: " + strconv.Itoa(currentSize))
+        // fmt.Println("Current size: " + strconv.Itoa(currentSize))
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         if (len(timeSlots) == 0) {
@@ -377,7 +399,14 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
     //write timeslot start
     if start != nil {
-        startQuery := "select data in (" + strconv.Itoa(start.Timestamp) + ", now) as ns where uuid='" + start.Uuid + "'"
+        startStartTime := strconv.FormatUint(start.StartTime, 10)
+        var startEndTime string
+        if (start.EndTime < 0) {
+            startEndTime = "now"
+        } else {
+            startEndTime = strconv.FormatUint(start.EndTime, 10)
+        }
+        startQuery := "select data in (" + startStartTime + ", " + startEndTime + ") as ns where uuid='" + start.Uuid + "'"
         fmt.Println("START QUERY: " + startQuery)
         startBody := makeQuery(collection.Url, startQuery)
         f.Write(startBody)  
@@ -403,7 +432,16 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     //write timeslot end
     if (end != nil) {
         f.Write([]byte(","))
-        endQuery := "select data in (0, " + strconv.Itoa(end.Timestamp) + ") as ns where uuid='" + end.Uuid + "'"
+
+        endStartTime := strconv.FormatUint(end.StartTime, 10)
+        var endEndTime string
+        if (end.EndTime < 0) {
+            endTime = "now"
+        } else {
+            endTime = strconv.FormatUint(end.EndTime, 10)
+        }
+
+        endQuery := "select data in (0, " + endStartTime + ", " + endEndTime +  ") as ns where uuid='" + end.Uuid + "'"
         fmt.Println("END QUERY: " + endQuery)
         endBody := makeQuery(collection.Url, endQuery)
         f.Write(endBody)
