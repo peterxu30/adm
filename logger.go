@@ -12,17 +12,15 @@ type LogStatus uint8
 /* Enums for possible log statuses */
 const (
 	UNSTARTED     LogStatus = iota + 1
-	READ_START              //not used
-	READ_COMPLETE           //not used
 	WRITE_START
 	WRITE_COMPLETE
 )
 
 /* Names of the Bolt buckets */
 const (
-	UUID_BUCKET     = "uuid_status" //stores information about each UUID's state
-	// UUID_METADATA_BUCKET = "uuid_m_status"
-	// UUID_TIMESERIES_BUCKET = "uuid_t_status"
+	// UUID_BUCKET     = "uuid_status" //stores information about each UUID's state
+	UUID_METADATA_BUCKET = "uuid_m_status"
+	UUID_TIMESERIES_BUCKET = "uuid_t_status"
 	METADATA_BUCKET = "metadata"    //stores state information about the program
 )
 
@@ -36,8 +34,16 @@ func newLogger() *Logger {
 		panic(err)
 	}
 
+	// db.Update(func(tx *bolt.Tx) error {
+	// 	_, err := tx.CreateBucketIfNotExists([]byte("uuid_status"))
+	// 	if err != nil {
+	// 		return fmt.Errorf("create bucket: %s", err)
+	// 	}
+	// 	return nil
+	// })
+
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("uuid_status"))
+		_, err := tx.CreateBucketIfNotExists([]byte(UUID_METADATA_BUCKET))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -45,7 +51,15 @@ func newLogger() *Logger {
 	})
 
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("metadata"))
+		_, err := tx.CreateBucketIfNotExists([]byte(UUID_TIMESERIES_BUCKET))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
+
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(METADATA_BUCKET))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -86,14 +100,46 @@ func (logger *Logger) getLogMetadata(key string) LogStatus {
 	return status
 }
 
-func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
+// func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
+// 	buf := convertToByteArray(status)
+// 	return logger.put(UUID_BUCKET, uuid, buf)
+// }
+
+func (logger *Logger) updateUuidMetadataStatus(uuid string, status LogStatus) error {
 	buf := convertToByteArray(status)
-	return logger.put(UUID_BUCKET, uuid, buf)
+	return logger.put(UUID_METADATA_BUCKET, uuid, buf)
 }
 
-func (logger *Logger) getUuidStatus(uuid string) LogStatus {
+func (logger *Logger) updateUuidTimeseriesStatus(uuid string, status LogStatus) error {
+	buf := convertToByteArray(status)
+	return logger.put(UUID_TIMESERIES_BUCKET, uuid, buf)
+}
+
+// func (logger *Logger) getUuidStatus(uuid string) LogStatus {
+// 	var status LogStatus
+// 	byteAry := logger.get(UUID_BUCKET, uuid)
+// 	buf := bytes.NewReader(byteAry)
+// 	err := binary.Read(buf, binary.LittleEndian, &status)
+// 	if err != nil {
+// 		fmt.Println("getUuidStatus err: ", err, uuid)
+// 	}
+// 	return status
+// }
+
+func (logger *Logger) getUuidMetadataStatus(uuid string) LogStatus {
 	var status LogStatus
-	byteAry := logger.get(UUID_BUCKET, uuid)
+	byteAry := logger.get(UUID_METADATA_BUCKET, uuid)
+	buf := bytes.NewReader(byteAry)
+	err := binary.Read(buf, binary.LittleEndian, &status)
+	if err != nil {
+		fmt.Println("getUuidStatus err: ", err, uuid)
+	}
+	return status
+}
+
+func (logger *Logger) getUuidTimeseriesStatus(uuid string) LogStatus {
+	var status LogStatus
+	byteAry := logger.get(UUID_TIMESERIES_BUCKET, uuid)
 	buf := bytes.NewReader(byteAry)
 	err := binary.Read(buf, binary.LittleEndian, &status)
 	if err != nil {

@@ -125,7 +125,8 @@ func (collection *DataCollection) AddUuidsToLog(start int, end int, wg *sync.Wai
 	defer wg.Done()
 	for i := start; i < end; i++ {
 		uuid := collection.Uuids[i]
-		collection.Log.updateUuidStatus(uuid, UNSTARTED)
+		collection.Log.updateUuidMetadataStatus(uuid, UNSTARTED)
+        collection.Log.updateUuidTimeseriesStatus(uuid, UNSTARTED)
 	}
 	fmt.Println("Uuids ", start, " to ", end, " added to log")
 }
@@ -477,7 +478,7 @@ func (collection *DataCollection) WriteDataBlock(start int, end int, wg *sync.Wa
 	for i := start; i < end; i++ {
 		uuid := collection.Uuids[i]
 
-		status := collection.Log.getUuidStatus(uuid)
+		status := collection.Log.getUuidMetadataStatus(uuid)
 
 		if status == WRITE_COMPLETE {
 			continue
@@ -543,7 +544,7 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 	first := true
 	for data := range chnnl {
 		uuid := data.Uuid
-		collection.Log.updateUuidStatus(uuid, WRITE_START)
+		collection.Log.updateUuidMetadataStatus(uuid, WRITE_START)
 
 		metadata := data.Metadata
 		// timeseriesdata := data.TimeseriesData
@@ -555,7 +556,7 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 		f1.Write(metadata)
 		// f2.Write(timeseriesdata)
 		// fmt.Println("Write Complete: ", uuid)
-		collection.Log.updateUuidStatus(uuid, WRITE_COMPLETE)
+		collection.Log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 	}
 
 	//TODO: Potential to write too many "]" if crashes here.
