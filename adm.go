@@ -207,7 +207,7 @@ func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseries
 
 type WindowData struct {
     Uuid string `json:"uuid"`
-    Readings [][]float64
+    Readings [][]int64
 }
 
 func (collection *DataCollection) getAllWindowData() []*WindowData {
@@ -241,8 +241,8 @@ func (collection *DataCollection) getWindowData(uuid string) *WindowData {
 
 type TimeSlot struct {
     Uuid string
-    StartTime float64
-    EndTime float64
+    StartTime int64
+    EndTime int64
     Count int
 }
 
@@ -253,7 +253,7 @@ func (window *WindowData) getTimeSlots() []*TimeSlot {
     for i := 0; i < length; i++ {
         reading := window.Readings[i]
         startTime := reading[0]
-        endTime := float64(-1) //means end time is now
+        endTime := int64(-1) //means end time is now
         if i < length - 1 {
             endTime = window.Readings[i + 1][0]
         }
@@ -317,12 +317,14 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         if (len(timeSlots) == 0) {
+            //log uuid as completed
             continue;
         }
-        startTimeSlot = timeSlots[0]
+        startTimeSlot = nil
         endTimeSlot = nil
         for _, timeSlot := range timeSlots {
             if timeSlot.Count == 0 {
+                // fmt.Println("Count empty: ", timeSlot);
                 continue
             }
             if currentSize >= FileSize { //convert to memory size check later
@@ -330,13 +332,16 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
                 //go write timeseries
                 // fmt.Println("Writing timeseries data for " + startTimeSlot.Uuid + " to " + endTimeSlot.Uuid + " size: " + strconv.Itoa(currentSize))
-                if (startTimeSlot == endTimeSlot) {
+                if (startTimeSlot != nil && startTimeSlot == endTimeSlot) {
+                    fmt.Println("Start end are same:", startTimeSlot, endTimeSlot)
                     endTimeSlot = nil
                 }
-                if (len(completeUuidsToWrite) > 0 && completeUuidsToWrite[0] == startTimeSlot.Uuid) {
+                if (startTimeSlot != nil && len(completeUuidsToWrite) > 0 && completeUuidsToWrite[0] == startTimeSlot.Uuid) {
+                    fmt.Println("Setting start time slot to nil")
                     startTimeSlot = nil
                 }
-                fmt.Println("Writing timeseries data for ", startTimeSlot, " to ", endTimeSlot)
+                fmt.Println("Writing timeseries data for ", startTimeSlot, "to", endTimeSlot, currentSize)
+                fmt.Println("Number of complete uuids", len(completeUuidsToWrite))
                 collection.WriteSomeTimeseriesData(fileName, startTimeSlot, completeUuidsToWrite, endTimeSlot, &innerWg)
                 //go write metadata probably don't need to split up metadata as much as timeseries data.
                 completeUuidsToWrite = make([]string, 0, end-start)//clear the array
@@ -399,15 +404,22 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
     //write timeslot start
     if start != nil {
-        startStartTime := strconv.FormatFloat(start.StartTime, 'b', -1, 64)
+        startStartTime := strconv.FormatInt(start.StartTime, 10)
         var startEndTime string
         if (start.EndTime < 0) {
+            //log uuid as completed
             startEndTime = "now"
         } else {
-            startEndTime = strconv.FormatFloat(start.EndTime, 'b', -1, 64)
+            startEndTime = strconv.FormatInt(start.EndTime, 10)
         }
+
+        if (start.Count == 0) {
+            //do not write
+            fmt.Println("No records for " + start.Uuid)
+        }
+
         startQuery := "select data in (" + startStartTime + ", " + startEndTime + ") as ns where uuid='" + start.Uuid + "'"
-        fmt.Println("START QUERY: " + startQuery)
+        fmt.Println("START QUERY: " + startQuery + " " + dest)
         startBody := makeQuery(collection.Url, startQuery)
         f.Write(startBody)  
     } else {
@@ -417,13 +429,13 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
 
     for i, uuid := range fullUuids {
         // uuid := collection.Uuids[i]
- 
-        f.Write([]byte(","))
-
-        if i%50 == 0 {
-            length := strconv.Itoa(i)
-            fmt.Println(length + " ids processed.")
+        if (start != nil) {
+            f.Write([]byte(","))
         }
+
+        length := strconv.Itoa(i)
+        fmt.Println(length + " ids processed. " + uuid + " " + dest)
+
         query := "select data in (0, now) as ns where uuid='" + uuid + "'"
         body := makeQuery(collection.Url, query)
         f.Write(body)
@@ -433,12 +445,13 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     if (end != nil) {
         f.Write([]byte(","))
 
-        endStartTime := strconv.FormatFloat(end.StartTime, 'b', -1, 64)
+        endStartTime := strconv.FormatInt(end.StartTime, 10)
         var endEndTime string
         if (end.EndTime < 0) {
+            //log uuid as completed
             endEndTime = "now"
         } else {
-            endEndTime = strconv.FormatFloat(end.EndTime, 'b', -1, 64)
+            endEndTime = strconv.FormatInt(end.EndTime, 10)
         }
 
         endQuery := "select data in (0, " + endStartTime + ", " + endEndTime +  ") as ns where uuid='" + end.Uuid + "'"
