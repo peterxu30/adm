@@ -207,7 +207,7 @@ func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseries
 
 type WindowData struct {
     Uuid string `json:"uuid"`
-    Readings [][]uint64
+    Readings [][]float64
 }
 
 func (collection *DataCollection) getAllWindowData() []*WindowData {
@@ -241,8 +241,8 @@ func (collection *DataCollection) getWindowData(uuid string) *WindowData {
 
 type TimeSlot struct {
     Uuid string
-    StartTime uint64
-    EndTime uint64
+    StartTime float64
+    EndTime float64
     Count int
 }
 
@@ -253,7 +253,7 @@ func (window *WindowData) getTimeSlots() []*TimeSlot {
     for i := 0; i < length; i++ {
         reading := window.Readings[i]
         startTime := reading[0]
-        endTime := -1 //means end time is now
+        endTime := float64(-1) //means end time is now
         if i < length - 1 {
             endTime = window.Readings[i + 1][0]
         }
@@ -399,12 +399,12 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
     //write timeslot start
     if start != nil {
-        startStartTime := strconv.FormatUint(start.StartTime, 10)
+        startStartTime := strconv.FormatFloat(start.StartTime, 'b', -1, 64)
         var startEndTime string
         if (start.EndTime < 0) {
             startEndTime = "now"
         } else {
-            startEndTime = strconv.FormatUint(start.EndTime, 10)
+            startEndTime = strconv.FormatFloat(start.EndTime, 'b', -1, 64)
         }
         startQuery := "select data in (" + startStartTime + ", " + startEndTime + ") as ns where uuid='" + start.Uuid + "'"
         fmt.Println("START QUERY: " + startQuery)
@@ -433,12 +433,12 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     if (end != nil) {
         f.Write([]byte(","))
 
-        endStartTime := strconv.FormatUint(end.StartTime, 10)
+        endStartTime := strconv.FormatFloat(end.StartTime, 'b', -1, 64)
         var endEndTime string
         if (end.EndTime < 0) {
-            endTime = "now"
+            endEndTime = "now"
         } else {
-            endTime = strconv.FormatUint(end.EndTime, 10)
+            endEndTime = strconv.FormatFloat(end.EndTime, 'b', -1, 64)
         }
 
         endQuery := "select data in (0, " + endStartTime + ", " + endEndTime +  ") as ns where uuid='" + end.Uuid + "'"
