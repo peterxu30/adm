@@ -299,22 +299,18 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     if (len(windowData) == 0) {
         return
     }
-    // firstWindow := windowData[0]
-    // fmt.Println("Got first window", firstWindow)
-    // firstTimeSlots := firstWindow.getTimeSlots()
-    // if (len(firstTimeSlots == 0))
 
-    // var startTimeSlot *TimeSlot = &TimeSlot {
-    //     Uuid: firstWindow.Uuid,
-    //     Timestamp: 0,
-    //     Count: 0,
-    // }
     var startTimeSlot *TimeSlot = nil
     var endTimeSlot *TimeSlot = nil
     fmt.Println("About to find a chunk to write")
     var innerWg sync.WaitGroup
     for _, window := range windowData { //each window represents one uuid
         // fmt.Println("Current size: " + strconv.Itoa(currentSize))
+
+        if (collection.Log.getUuidTimeseriesStatus(window.Uuid) == WRITE_COMPLETE) {
+            continue
+        }
+
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         if (len(timeSlots) == 0) {
@@ -328,6 +324,7 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
                 // fmt.Println("Count empty: ", timeSlot);
                 continue
             }
+
             if currentSize >= FileSize { //convert to memory size check later
                 innerWg.Add(1)
                 fileName := strconv.Itoa(start) + "_" + strconv.Itoa(fileCount)
@@ -405,11 +402,13 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
     }
     //write timeslot start
     if start != nil {
+        finished := false
         startStartTime := strconv.FormatInt(start.StartTime, 10)
         var startEndTime string
         if (start.EndTime < 0) {
             //log uuid as completed
             startEndTime = "now"
+            finished = true
         } else {
             startEndTime = strconv.FormatInt(start.EndTime, 10)
         }
@@ -423,6 +422,10 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         fmt.Println("START QUERY: " + startQuery + " " + dest)
         startBody := makeQuery(collection.Url, startQuery)
         f.Write(startBody)  
+
+        if finished {
+            collection.Log.updateUuidTimeseriesStatus(start.Uuid, WRITE_COMPLETE);
+        }
     } else {
         fmt.Println("No start query")
     }
@@ -430,6 +433,10 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
 
     for i, uuid := range fullUuids {
         // uuid := collection.Uuids[i]
+        if (collection.Log.getUuidTimeseriesStatus(uuid) == WRITE_COMPLETE) {
+            continue
+        }
+
         if (start != nil) {
             f.Write([]byte(","))
         }
@@ -444,13 +451,14 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
 
     //write timeslot end
     if (end != nil) {
+        finished := false
         f.Write([]byte(","))
-
         endStartTime := strconv.FormatInt(end.StartTime, 10)
         var endEndTime string
         if (end.EndTime < 0) {
             //log uuid as completed
             endEndTime = "now"
+            finished = true
         } else {
             endEndTime = strconv.FormatInt(end.EndTime, 10)
         }
@@ -459,6 +467,10 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         fmt.Println("END QUERY: " + endQuery)
         endBody := makeQuery(collection.Url, endQuery)
         f.Write(endBody)
+
+        if finished {
+            collection.Log.updateUuidTimeseriesStatus(end.Uuid, WRITE_COMPLETE)
+        }
     } else {
         fmt.Println("No end query")
     }
@@ -559,9 +571,6 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 		collection.Log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 	}
 
-	//TODO: Potential to write too many "]" if crashes here.
-    //Maybe have some intermediate status for the file. WRITE_COMPLETE and COMPLETE?
-    //Easier if separate logic for metadata and timeseriesdata too.
 	f1.Write([]byte("]")) //fix this for WAL
 	// f2.Write([]byte("]")) //fix this for WAL
 	collection.Log.updateLogMetadata("write_status", WRITE_COMPLETE)
