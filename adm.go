@@ -20,7 +20,7 @@ const (
 	MetadataDestination       = "metadata.txt"
 	TimeseriesDataDestination = "timeseriesdata.txt"
 	ChunkSize                 = 2000 //amount of UUIDs each go routine processes
-    FileSize = 10000000 //amount of records in each timeseries file 
+    FileSize = 10000000 //amount of records in each timeseries file
     YearNS = 31536000000000000
 )
 
@@ -128,8 +128,8 @@ func (collection *DataCollection) AddUuidsToLog(start int, end int, wg *sync.Wai
 	defer wg.Done()
 	for i := start; i < end; i++ {
 		uuid := collection.Uuids[i]
-		collection.Log.updateUuidMetadataStatus(uuid, UNSTARTED)
-        collection.Log.updateUuidTimeseriesStatus(uuid, UNSTARTED)
+		collection.Log.updateUuidMetadataStatus(uuid, NOT_STARTED)
+        // collection.Log.updateUuidTimeseriesStatus(uuid, nil)
 	}
 	fmt.Println("Uuids ", start, " to ", end, " added to log")
 }
@@ -310,9 +310,9 @@ func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync
     for _, window := range windowData { //each window represents one uuid
         // fmt.Println("Current size: " + strconv.Itoa(currentSize))
 
-        if (collection.Log.getUuidTimeseriesStatus(window.Uuid) == WRITE_COMPLETE) {
-            continue
-        }
+        // if (collection.Log.getUuidTimeseriesStatus(window.Uuid) == WRITE_COMPLETE) {
+        //     continue
+        // }
 
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
@@ -427,7 +427,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         f.Write(startBody)  
 
         if finished {
-            collection.Log.updateUuidTimeseriesStatus(start.Uuid, WRITE_COMPLETE);
+            // collection.Log.updateUuidTimeseriesStatus(start.Uuid, WRITE_COMPLETE);
         }
     } else {
         fmt.Println("No start query")
@@ -436,9 +436,9 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
 
     for i, uuid := range fullUuids {
         // uuid := collection.Uuids[i]
-        if (collection.Log.getUuidTimeseriesStatus(uuid) == WRITE_COMPLETE) {
-            continue
-        }
+        // if (collection.Log.getUuidTimeseriesStatus(uuid) == WRITE_COMPLETE) {
+            // continue
+        // }
 
         if (start != nil) {
             f.Write([]byte(","))
@@ -451,7 +451,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         body := makeQuery(collection.Url, query)
         f.Write(body)
 
-        collection.Log.updateUuidTimeseriesStatus(uuid, WRITE_COMPLETE)
+        // collection.Log.updateUuidTimeseriesStatus(uuid, WRITE_COMPLETE)
     }
 
     //write timeslot end
@@ -474,7 +474,7 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         f.Write(endBody)
 
         if finished {
-            collection.Log.updateUuidTimeseriesStatus(end.Uuid, WRITE_COMPLETE)
+            // collection.Log.updateUuidTimeseriesStatus(end.Uuid, WRITE_COMPLETE)
         }
     } else {
         fmt.Println("No end query")
@@ -495,11 +495,11 @@ func (collection *DataCollection) WriteDataBlock(start int, end int, wg *sync.Wa
 	for i := start; i < end; i++ {
 		uuid := collection.Uuids[i]
 
-		status := collection.Log.getUuidMetadataStatus(uuid)
+		// status := collection.Log.getUuidMetadataStatus(uuid)
 
-		if status == WRITE_COMPLETE {
-			continue
-		}
+		// if status == WRITE_COMPLETE {
+		// 	continue
+		// }
 
 		//read into channel
 		mQuery := "select * where uuid='" + uuid + "'"
@@ -527,15 +527,15 @@ func (collection *DataCollection) WriteDataBlock(start int, end int, wg *sync.Wa
  * Does not check if UUID was already written. This is responsibility of the WriteDataBlock method.
  */
 func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan UuidTuple) {
-	writeStatus := collection.Log.getLogMetadata("write_status")
-
+	// writeStatus := collection.Log.getLogMetadata("write_status")
+    writeStatus := NOT_STARTED
 	if writeStatus == WRITE_COMPLETE {
 		fmt.Println("Files ", dest1, " already written.")
 		return
 	}
 
 	// In order to ensure correct JSON format
-	if writeStatus == UNSTARTED {
+	if writeStatus == NOT_STARTED {
 		err := ioutil.WriteFile(dest1, []byte("["), 0666)
 		if err != nil {
 			panic(err)
@@ -545,7 +545,7 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 		// if err != nil {
 		// 	panic(err)
 		// }
-		collection.Log.updateLogMetadata("write_status", WRITE_START)
+		// collection.Log.updateLogMetadata("write_status", WRITE_START)
 	}
 
 	f1, err := os.OpenFile(dest1, os.O_APPEND|os.O_WRONLY, 0666)
@@ -560,8 +560,8 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 
 	first := true
 	for data := range chnnl {
-		uuid := data.Uuid
-		collection.Log.updateUuidMetadataStatus(uuid, WRITE_START)
+		// uuid := data.Uuid
+		// collection.Log.updateUuidMetadataStatus(uuid, WRITE_START)
 
 		metadata := data.Metadata
 		// timeseriesdata := data.TimeseriesData
@@ -573,12 +573,12 @@ func (collection *DataCollection) WriteFromChannel(dest1 string, chnnl chan Uuid
 		f1.Write(metadata)
 		// f2.Write(timeseriesdata)
 		// fmt.Println("Write Complete: ", uuid)
-		collection.Log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
+		// collection.Log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 	}
 
 	f1.Write([]byte("]")) //fix this for WAL
 	// f2.Write([]byte("]")) //fix this for WAL
-	collection.Log.updateLogMetadata("write_status", WRITE_COMPLETE)
+	// collection.Log.updateLogMetadata("write_status", WRITE_COMPLETE)
 }
 
 /* General purpose function to make an HTTP POST request to the specified url

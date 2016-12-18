@@ -11,17 +11,21 @@ type LogStatus uint8
 
 /* Enums for possible log statuses */
 const (
-	UNSTARTED     LogStatus = iota + 1
+	NOT_STARTED     LogStatus = iota + 1
 	WRITE_START
 	WRITE_COMPLETE
 )
 
-/* Names of the Bolt buckets */
 const (
-	// UUID_BUCKET     = "uuid_status" //stores information about each UUID's state
+	/* Bolt buckets */
+	METADATA_BUCKET = "metadata"    //stores state information about the program
+	WINDOW_BUCKET = "window_data"
 	UUID_METADATA_BUCKET = "uuid_m_status"
 	UUID_TIMESERIES_BUCKET = "uuid_t_status"
-	METADATA_BUCKET = "metadata"    //stores state information about the program
+
+	/* Metadata bucket keys */
+	UUIDS_FETCHED = "uuids_fetched"
+	WINDOWS_FETCHED = "windows_fetched"
 )
 
 type Logger struct {
@@ -34,14 +38,6 @@ func newLogger() *Logger {
 		panic(err)
 	}
 
-	// db.Update(func(tx *bolt.Tx) error {
-	// 	_, err := tx.CreateBucketIfNotExists([]byte("uuid_status"))
-	// 	if err != nil {
-	// 		return fmt.Errorf("create bucket: %s", err)
-	// 	}
-	// 	return nil
-	// })
-
 	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(UUID_METADATA_BUCKET))
 		if err != nil {
@@ -51,7 +47,7 @@ func newLogger() *Logger {
 	})
 
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(UUID_TIMESERIES_BUCKET))
+		_, err := tx.CreateBucketIfNotExists([]byte(WINDOW_BUCKET))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -66,106 +62,121 @@ func newLogger() *Logger {
 		return nil
 	})
 
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(UUID_TIMESERIES_BUCKET))
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+		return nil
+	})
+
 	logger := Logger{
 		log: db,
 	}
 
 	//check if this is first initialization of read_uuids
-	if logger.get(METADATA_BUCKET, "read_uuids") == nil {
-		logger.updateLogMetadata("read_uuids", UNSTARTED) //to know whether or not to repull uuids
-		fmt.Println("read_uuids initialized")
+	if logger.get(METADATA_BUCKET, []byte(UUIDS_FETCHED)) == nil {
+		logger.updateLogMetadata(UUIDS_FETCHED, NOT_STARTED) //to know whether or not to repull uuids
+		fmt.Println("uuids_fetched initialized")
 	}
 
-	if logger.get(METADATA_BUCKET, "write_status") == nil {
-		logger.updateLogMetadata("write_status", UNSTARTED)
+	if logger.get(METADATA_BUCKET, []byte(WINDOWS_FETCHED)) == nil {
+		logger.updateLogMetadata(WINDOWS_FETCHED, NOT_STARTED)
 		fmt.Println("write_started initialized")
 	}
 
 	return &logger
 }
 
-func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
-	buf := convertToByteArray(status)
-	return logger.put(METADATA_BUCKET, key, buf)
-}
+/* Log Metadata Functions */
 
 func (logger *Logger) getLogMetadata(key string) LogStatus {
-	var status LogStatus
-	byteAry := logger.get(METADATA_BUCKET, key)
-	buf := bytes.NewReader(byteAry)
-	err := binary.Read(buf, binary.LittleEndian, &status)
-	if err != nil {
-		fmt.Println("getUuidStatus err: ", err)
-	}
-	return status
+	body := logger.get(METADATA_BUCKET, []byte(key))
+	return convertFromBinaryToLogStatus(body)
 }
 
-// func (logger *Logger) updateUuidStatus(uuid string, status LogStatus) error {
-// 	buf := convertToByteArray(status)
-// 	return logger.put(UUID_BUCKET, uuid, buf)
-// }
+func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
+	buf := convertToByteArray(status)
+	return logger.put(METADATA_BUCKET, []byte(key), buf)
+}
+
+/* Window Data Functions */
+
+func (logger *Logger) getWindowStatus(uuid string) *WindowData {
+	body := logger.get(WINDOW_BUCKET, []byte(uuid))
+	window := convertFromBinaryToWindow(body)
+	return &window
+}
+
+func (logger *Logger) updateWindowStatus(uuid string, window *WindowData) error {
+	buf := convertToByteArray(*window)
+	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
+}
+
+/* Metadata Functions */
+
+func (logger *Logger) getUuidMetadataStatus(uuid string) LogStatus {
+	body := logger.get(UUID_METADATA_BUCKET, []byte(uuid))
+	return convertFromBinaryToLogStatus(body)
+}
 
 func (logger *Logger) updateUuidMetadataStatus(uuid string, status LogStatus) error {
 	buf := convertToByteArray(status)
-	return logger.put(UUID_METADATA_BUCKET, uuid, buf)
+	return logger.put(UUID_METADATA_BUCKET, []byte(uuid), buf)
 }
 
-func (logger *Logger) updateUuidTimeseriesStatus(uuid string, status LogStatus) error {
+/* Timeseries Data Functions */
+
+func (logger *Logger) getUuidTimeseriesStatus(timeSlot *TimeSlot) LogStatus {
+	body := logger.get(UUID_TIMESERIES_BUCKET, convertToByteArray(*timeSlot))
+	return convertFromBinaryToLogStatus(body)
+}
+
+func (logger *Logger) updateUuidTimeseriesStatus(timeSlot *TimeSlot, status LogStatus) error {
 	buf := convertToByteArray(status)
-	return logger.put(UUID_TIMESERIES_BUCKET, uuid, buf)
-}
-
-// func (logger *Logger) getUuidStatus(uuid string) LogStatus {
-// 	var status LogStatus
-// 	byteAry := logger.get(UUID_BUCKET, uuid)
-// 	buf := bytes.NewReader(byteAry)
-// 	err := binary.Read(buf, binary.LittleEndian, &status)
-// 	if err != nil {
-// 		fmt.Println("getUuidStatus err: ", err, uuid)
-// 	}
-// 	return status
-// }
-
-func (logger *Logger) getUuidMetadataStatus(uuid string) LogStatus {
-	var status LogStatus
-	byteAry := logger.get(UUID_METADATA_BUCKET, uuid)
-	buf := bytes.NewReader(byteAry)
-	err := binary.Read(buf, binary.LittleEndian, &status)
-	if err != nil {
-		fmt.Println("getUuidStatus err: ", err, uuid)
-	}
-	return status
-}
-
-func (logger *Logger) getUuidTimeseriesStatus(uuid string) LogStatus {
-	var status LogStatus
-	byteAry := logger.get(UUID_TIMESERIES_BUCKET, uuid)
-	buf := bytes.NewReader(byteAry)
-	err := binary.Read(buf, binary.LittleEndian, &status)
-	if err != nil {
-		fmt.Println("getUuidStatus err: ", err, uuid)
-	}
-	return status
+	return logger.put(UUID_TIMESERIES_BUCKET, convertToByteArray(*timeSlot), buf)
 }
 
 /* Lowest level Logger methods. Should not be called directly. */
-func (logger *Logger) get(bucket string, key string) []byte {
+func (logger *Logger) get(bucket string, key []byte) []byte {
 	var value []byte
 	logger.log.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucket))
-		value = b.Get([]byte(key))
+		value = b.Get(key)
 		return nil
 	})
 	return value
 }
 
 /* Lowest level Logger methods. Should not be called directly. */
-func (logger *Logger) put(bucket string, key string, value []byte) error {
+func (logger *Logger) put(bucket string, key []byte, value []byte) error {
 	return logger.log.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucket))
-		err := b.Put([]byte(key), value)
+		err := b.Put(key, value)
 		return err
 	})
+}
+
+/* Converts byte array into WindowData struct */
+func convertFromBinaryToWindow(body []byte) WindowData {
+	var window WindowData
+	buf := bytes.NewReader(body)
+	err := binary.Read(buf, binary.LittleEndian, &window)
+	if err != nil {
+		fmt.Println("getUuidStatus err: ", err)
+	}
+	return window
+}
+
+/* Converts byte array into LogStatus */
+func convertFromBinaryToLogStatus(body []byte) LogStatus {
+	var status LogStatus
+	buf := bytes.NewReader(body)
+	err := binary.Read(buf, binary.LittleEndian, &status)
+	if err != nil {
+		fmt.Println("getUuidStatus err: ", err)
+	}
+	return status
 }
 
 /* General purpose function to convert data of type interface to byte array
