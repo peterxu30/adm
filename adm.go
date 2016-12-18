@@ -5,14 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+    "log"
 	"net/http"
 	"os"
+    "runtime"
     "strconv"
 	"sync"
+    "time"
 )
 
 const (
-	Url                       = "http://castle.cs.berkeley.edu:8079/api/query"
+	Url                       = "http://128.32.37.201:8079/api/query"
 	UuidDestination           = "uuids.txt"
 	MetadataDestination       = "metadata.txt"
 	TimeseriesDataDestination = "timeseriesdata.txt"
@@ -389,7 +392,7 @@ func (collection *DataCollection) WriteSomeMetadata(dest string, start int, end 
  /* Used
   * Should only be called as a go routine
   */
-func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *TimeSlot, fullUuids []string, end *TimeSlot, wg *sync.WaitGroup) {
+func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *TimeSlot, fullUuids []string, end *TimeSlot, wg *sync.WaitGroup) { //dont add opening bracket if file already exists
     defer wg.Done()
     fmt.Println("Writing timeseriesdata\n")
     err := ioutil.WriteFile(dest, []byte("["), 0644)
@@ -447,6 +450,8 @@ func (collection *DataCollection) WriteSomeTimeseriesData(dest string, start *Ti
         query := "select data in (0, now) as ns where uuid='" + uuid + "'"
         body := makeQuery(collection.Url, query)
         f.Write(body)
+
+        collection.Log.updateUuidTimeseriesStatus(uuid, WRITE_COMPLETE)
     }
 
     //write timeslot end
@@ -622,6 +627,12 @@ func readMetadataFile(index int) (mdata [][]Metadata) {
 }
 
 func main() {
+    go func() {
+        for {
+            time.Sleep(1 * time.Second)
+            log.Println(runtime.NumGoroutine())
+        }
+    }()
 	collection := NewDataCollection(Url)
 	collection.ReadAllUuids()
 	collection.AddAllUuidsToLog()
