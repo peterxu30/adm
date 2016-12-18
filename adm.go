@@ -20,7 +20,7 @@ const (
 	MetadataDestination       = "metadata.txt"
 	TimeseriesDataDestination = "timeseriesdata.txt"
 	ChunkSize                 = 2000 //amount of UUIDs each go routine processes
-    FileSize = 10000000 //amount of records in each timeseries file
+    FileSize = 10000000 //amount of records in each timeseries file 
     YearNS = 31536000000000000
 )
 
