@@ -11,12 +11,15 @@ type LogStatus uint8
 
 /* Enums for possible log statuses */
 const (
-	NOT_STARTED     LogStatus = iota + 1
+	NIL LogStatus = iota + 1 //Indicates no entry. No entry in the log should ever have a NIL value.
+	NOT_STARTED     
 	WRITE_START
 	WRITE_COMPLETE
 )
 
 const (
+	DB_NAME = "adm.db"
+
 	/* Bolt buckets */
 	METADATA_BUCKET = "metadata"    //stores state information about the program
 	WINDOW_BUCKET = "window_data"
@@ -33,7 +36,11 @@ type Logger struct {
 }
 
 func newLogger() *Logger {
-	db, err := bolt.Open("adm.db", 0600, nil)
+	return newLoggerWithName(DB_NAME)
+}
+
+func newLoggerWithName(name string) *Logger {
+	db, err := bolt.Open(name, 0600, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -75,12 +82,12 @@ func newLogger() *Logger {
 	}
 
 	//check if this is first initialization of read_uuids
-	if logger.get(METADATA_BUCKET, []byte(UUIDS_FETCHED)) == nil {
+	if logger.getLogMetadata(UUIDS_FETCHED) == NIL {
 		logger.updateLogMetadata(UUIDS_FETCHED, NOT_STARTED) //to know whether or not to repull uuids
 		fmt.Println("uuids_fetched initialized")
 	}
 
-	if logger.get(METADATA_BUCKET, []byte(WINDOWS_FETCHED)) == nil {
+	if logger.getLogMetadata(WINDOWS_FETCHED) == NIL {
 		logger.updateLogMetadata(WINDOWS_FETCHED, NOT_STARTED)
 		fmt.Println("write_started initialized")
 	}
@@ -104,8 +111,7 @@ func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
 
 func (logger *Logger) getWindowStatus(uuid string) *WindowData {
 	body := logger.get(WINDOW_BUCKET, []byte(uuid))
-	window := convertFromBinaryToWindow(body)
-	return &window
+	return convertFromBinaryToWindow(body)
 }
 
 func (logger *Logger) updateWindowStatus(uuid string, window *WindowData) error {
@@ -157,19 +163,32 @@ func (logger *Logger) put(bucket string, key []byte, value []byte) error {
 	})
 }
 
+func (logger *Logger) bucketByteSize(bucket string) int64 {
+	var size int64
+	logger.log.View(func(tx *bolt.Tx) error {
+		size = tx.Size()
+		return nil
+	})
+	return size
+}
+
 /* Converts byte array into WindowData struct */
-func convertFromBinaryToWindow(body []byte) WindowData {
+func convertFromBinaryToWindow(body []byte) *WindowData {
 	var window WindowData
 	buf := bytes.NewReader(body)
 	err := binary.Read(buf, binary.LittleEndian, &window)
 	if err != nil {
 		fmt.Println("getUuidStatus err: ", err)
 	}
-	return window
+	return &window
 }
 
 /* Converts byte array into LogStatus */
 func convertFromBinaryToLogStatus(body []byte) LogStatus {
+	if body == nil {
+		return NIL
+	}
+
 	var status LogStatus
 	buf := bytes.NewReader(body)
 	err := binary.Read(buf, binary.LittleEndian, &status)
