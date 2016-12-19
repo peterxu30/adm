@@ -23,7 +23,7 @@ func newTestLog() *Logger {
 	return newLoggerWithName(TEST_LOG)
 }
 
-func TestInit(t *testing.T) {
+func TestLogInit(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -44,7 +44,7 @@ func TestInit(t *testing.T) {
 	testTeardown() //better way than calling it at end of every test?
 }
 
-func TestUpdateMetadataUuidsFetchedKey(t *testing.T) {
+func TestLogUpdateMetadataUuidsFetchedKey(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -76,7 +76,7 @@ func TestUpdateMetadataUuidsFetchedKey(t *testing.T) {
 	testTeardown()
 }
 
-func TestUpdateMetadataWindowsFetchedKey(t *testing.T) {
+func TestLogUpdateMetadataWindowsFetchedKey(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -108,7 +108,7 @@ func TestUpdateMetadataWindowsFetchedKey(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertWindowData(t *testing.T) {
+func TestLogInsertWindowData(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -138,7 +138,7 @@ func TestInsertWindowData(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertSimpleUuidMetadata(t *testing.T) {
+func TestLogInsertSimpleUuidMetadata(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -194,7 +194,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertStripedUuidMetadata(t *testing.T) {
+func TestLogInsertStripedUuidMetadata(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -236,7 +236,7 @@ func TestInsertStripedUuidMetadata(t *testing.T) {
 	testTeardown()
 }
 
-func TestUpdateUuidMetadata(t *testing.T) {
+func TestLogUpdateUuidMetadata(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -289,7 +289,7 @@ func TestUpdateUuidMetadata(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
+func TestLogInsertSimpleUuidTimeseriesData(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -384,7 +384,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertStripedUuidTimeseriesData(t *testing.T) {
+func TestLogInsertStripedUuidTimeseriesData(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -441,7 +441,7 @@ func TestInsertStripedUuidTimeseriesData(t *testing.T) {
 	testTeardown()
 }
 
-func TestRetrieveNonexistentWindowKey(t *testing.T) {
+func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -468,7 +468,7 @@ func TestRetrieveNonexistentWindowKey(t *testing.T) {
 	testTeardown()
 }
 
-func TestRetrieveNonexistentUuidMetadataKey(t *testing.T) {
+func TestLogRetrieveNonexistentUuidMetadataKey(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -490,7 +490,7 @@ func TestRetrieveNonexistentUuidMetadataKey(t *testing.T) {
 	testTeardown()
 }
 
-func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
+func TestLogRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()

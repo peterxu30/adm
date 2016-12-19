@@ -84,12 +84,12 @@ func newLoggerWithName(name string) *Logger {
 	//check if this is first initialization of read_uuids
 	if logger.getLogMetadata(UUIDS_FETCHED) == NIL {
 		logger.updateLogMetadata(UUIDS_FETCHED, NOT_STARTED) //to know whether or not to repull uuids
-		fmt.Println("uuids_fetched initialized")
+		// fmt.Println("uuids_fetched initialized")
 	}
 
 	if logger.getLogMetadata(WINDOWS_FETCHED) == NIL {
 		logger.updateLogMetadata(WINDOWS_FETCHED, NOT_STARTED)
-		fmt.Println("write_started initialized")
+		// fmt.Println("write_started initialized")
 	}
 
 	return &logger
