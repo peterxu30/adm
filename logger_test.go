@@ -443,18 +443,107 @@ func TestInsertStripedUuidTimeseriesData(t *testing.T) {
 	testTeardown()
 }
 
-func TestUpdateUuidTimeseriesdata(t *testing.T) {}
+func TestRetrieveNonexistentWindowKey(t *testing.T) {
+	testStartup()
 
-func TestRetrieveNonexistentWindowKey(t *testing.T) {}
+	log := newTestLog()
 
-func TestRetrieveNonexistentUuidMetadataKey(t *testing.T) {}
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		reading := make([][]int64, 1)
+		reading[0] = []int64{int64(i)}
+		window := &WindowData {
+			Uuid: uuid,
+			Readings: reading,
+		}
+		err := log.updateWindowStatus(uuid, window)
+		if err != nil {
+			t.Fatal("inserting window data failed: ", uuid)
+		}
+	}
 
-func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {}
+	uuid := strconv.Itoa(1000)
+	if log.getWindowStatus(uuid) != nil {
+		t.Fatal(uuid, "should not exist but it does")
+	}
 
-/* Tests to write:
- * 1. Insert/retrieve Window data
- * 2. Insert/retrieve metadata
- * 3. Insert/retrieve timeseries data
- * 4. Update/retrieve metadata
- * 5. Update/retrieve timeseries data
-*/
+	testTeardown()
+}
+
+func TestRetrieveNonexistentUuidMetadataKey(t *testing.T) {
+	testStartup()
+
+	log := newTestLog()
+
+	//insert some values
+	for i := 0; i < 100; i++ {
+		uuid := strconv.Itoa(i)
+		err := log.updateUuidMetadataStatus(uuid, NOT_STARTED)
+		if err != nil {
+			t.Fatal("inserting metadata failed", uuid)
+		}
+	}
+
+	uuid := strconv.Itoa(100)
+	if log.getUuidMetadataStatus(uuid) != NIL {
+		t.Fatal(uuid, "should not exist but it does")	
+	}
+
+	testTeardown()
+}
+
+func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
+	testStartup()
+
+	log := newTestLog()
+
+	for i := 0; i < 30; i++ {
+		uuid := strconv.Itoa(i)
+		for time := 0; time < 3; time++ {
+			slot := &TimeSlot {
+				Uuid: uuid,
+				StartTime: int64(time),
+				EndTime: int64(time + 1),
+			}
+			err := log.updateUuidTimeseriesStatus(slot, NOT_STARTED)
+			if err != nil {
+				t.Fatal("inserting timeseries data failed", uuid)
+			}
+		}	
+	}
+
+	//bad uuid
+	badSlot := &TimeSlot {
+				Uuid: strconv.Itoa(30),
+				StartTime: int64(1),
+				EndTime: int64(2),
+	}
+
+	if log.getUuidTimeseriesStatus(badSlot) != NIL {
+		t.Fatal(badSlot.Uuid, "should not exist but it does")
+	}
+
+	//bad start time
+	badSlot = &TimeSlot {
+				Uuid: strconv.Itoa(0),
+				StartTime: int64(10),
+				EndTime: int64(2),
+	}
+
+	if log.getUuidTimeseriesStatus(badSlot) != NIL {
+		t.Fatal(badSlot.Uuid, "should not exist but it does")
+	}
+
+	//bad end time
+	badSlot = &TimeSlot {
+				Uuid: strconv.Itoa(0),
+				StartTime: int64(1),
+				EndTime: int64(20),
+	}
+
+	if log.getUuidTimeseriesStatus(badSlot) != NIL {
+		t.Fatal(badSlot.Uuid, "should not exist but it does")
+	}
+
+	testTeardown()
+}

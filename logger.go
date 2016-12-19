@@ -172,8 +172,25 @@ func (logger *Logger) bucketByteSize(bucket string) int64 {
 	return size
 }
 
+/* General purpose function to convert data of type interface to byte array
+ * Used to convert LogStatus to []byte.
+ */
+func convertToByteArray(data interface{}) []byte {
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
+	if err != nil {
+		fmt.Println("encode error:", err)
+	}
+	return buf.Bytes()
+}
+
 /* Converts byte array into WindowData struct */
 func convertFromBinaryToWindow(body []byte) *WindowData {
+	if body == nil {
+		return nil
+	}
+
 	var window WindowData
 	buf := bytes.NewBuffer(body)
 	dec := gob.NewDecoder(buf)
@@ -198,17 +215,4 @@ func convertFromBinaryToLogStatus(body []byte) LogStatus {
 		fmt.Println("convertFromBinaryToLogStatus err:", err)
 	}
 	return status
-}
-
-/* General purpose function to convert data of type interface to byte array
- * Used to convert LogStatus to []byte.
- */
-func convertToByteArray(data interface{}) []byte {
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(data)
-	if err != nil {
-		fmt.Println("encode error:", err)
-	}
-	return buf.Bytes()
 }
