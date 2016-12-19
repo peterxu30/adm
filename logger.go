@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
+	"encoding/gob"
 	"fmt"
 	"github.com/boltdb/bolt"
 )
@@ -175,10 +175,11 @@ func (logger *Logger) bucketByteSize(bucket string) int64 {
 /* Converts byte array into WindowData struct */
 func convertFromBinaryToWindow(body []byte) *WindowData {
 	var window WindowData
-	buf := bytes.NewReader(body)
-	err := binary.Read(buf, binary.LittleEndian, &window)
+	buf := bytes.NewBuffer(body)
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(&window)
 	if err != nil {
-		fmt.Println("getUuidStatus err: ", err)
+		fmt.Println("convertFromBinaryToWindow err:", err)
 	}
 	return &window
 }
@@ -190,10 +191,11 @@ func convertFromBinaryToLogStatus(body []byte) LogStatus {
 	}
 
 	var status LogStatus
-	buf := bytes.NewReader(body)
-	err := binary.Read(buf, binary.LittleEndian, &status)
+	buf := bytes.NewBuffer(body)
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(&status)
 	if err != nil {
-		fmt.Println("getUuidStatus err: ", err)
+		fmt.Println("convertFromBinaryToLogStatus err:", err)
 	}
 	return status
 }
@@ -202,10 +204,11 @@ func convertFromBinaryToLogStatus(body []byte) LogStatus {
  * Used to convert LogStatus to []byte.
  */
 func convertToByteArray(data interface{}) []byte {
-	buf := new(bytes.Buffer)
-	err := binary.Write(buf, binary.LittleEndian, data)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(data)
 	if err != nil {
-		panic(err)
+		fmt.Println("encode error:", err)
 	}
 	return buf.Bytes()
 }

@@ -111,7 +111,33 @@ func TestUpdateMetadataWindowsFetchedKey(t *testing.T) {
 }
 
 func TestInsertWindowData(t *testing.T) {
+	testStartup()
 
+	log := newTestLog()
+
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		reading := make([][]int64, 1)
+		reading[0] = []int64{int64(i)}
+		window := &WindowData {
+			Uuid: uuid,
+			Readings: reading,
+		}
+		err := log.updateWindowStatus(uuid, window)
+		if err != nil {
+			t.Fatal("inserting window data failed: ", uuid)
+		}
+	}
+
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		window := log.getWindowStatus(uuid)
+		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
+			t.Fatal("uuid", uuid, "and corresponding window do not match")
+		}
+	}
+
+	testTeardown()
 }
 
 func TestInsertSimpleUuidMetadata(t *testing.T) {
@@ -161,72 +187,39 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 	testTeardown()
 }
 
-func TestInsertDifferentUuidMetadata(t *testing.T) {
+func TestInsertStripedUuidMetadata(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i ++ {
 		uuid := strconv.Itoa(i)
-		log.updateUuidMetadataStatus(uuid, NOT_STARTED)
-	}
-
-	for i := 0; i < 100; i++ {
-		uuid := strconv.Itoa(i)
-		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != NOT_STARTED {
-			t.Fatal(uuid, "should have status NOT_STARTED")
+		if i % 3 == 0 {
+			log.updateUuidMetadataStatus(uuid, NOT_STARTED)
+		} else if i % 3 == 1 {
+			log.updateUuidMetadataStatus(uuid, WRITE_START)
+		} else {
+			log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 		}
 	}
 
-	for i := 0; i < 70; i++ {
-		uuid := strconv.Itoa(i)
-		log.updateUuidMetadataStatus(uuid, WRITE_START)
-	}
-
-	for i := 0; i < 70; i++ {
+	for i := 0; i < 1000; i ++ {
 		uuid := strconv.Itoa(i)
 		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != WRITE_START {
-			t.Fatal(uuid, "should have status WRITE_START")
+		if (i % 3 == 0) {
+			if uuidStatus != NOT_STARTED {
+				t.Fatal(uuid, "should have status NOT_STARTED")
+			}
+		} else if i % 3 == 1 {
+			if uuidStatus != WRITE_START {
+				t.Fatal(uuid, "should have status WRITE_START")
+			}
+		} else {
+			if uuidStatus != WRITE_COMPLETE {
+				t.Fatal(uuid, "should have status WRITE_COMPLETE")
+			}
 		}
-	}
-
-	for i := 70; i < 100; i++ {
-		uuid := strconv.Itoa(i)
-		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != NOT_STARTED {
-			t.Fatal(uuid, "should have status NOT_STARTED")
-		}
-	}
-
-	for i := 0; i < 40; i++ {
-		uuid := strconv.Itoa(i)
-		log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
-	}
-
-	for i := 0; i < 40; i++ {
-		uuid := strconv.Itoa(i)
-		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != WRITE_COMPLETE {
-			t.Fatal(uuid, "should have status WRITE_COMPLETE")
-		}
-	}
-
-	for i := 41; i < 70; i++ {
-		uuid := strconv.Itoa(i)
-		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != WRITE_START {
-			t.Fatal(uuid, "should have status WRITE_START")
-		}
-	}
-
-	for i := 70; i < 100; i++ {
-		uuid := strconv.Itoa(i)
-		uuidStatus := log.getUuidMetadataStatus(uuid)
-		if uuidStatus != NOT_STARTED {
-			t.Fatal(uuid, "should have status NOT_STARTED")
-		}
+		
 	}
 
 	testTeardown()
