@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -10,7 +9,6 @@ import (
 //testing constants
 const (
 	TEST_LOG = "test_log.db"
-	NONSENSE = "nonsenseString"
 )
 
 func testStartup() {
@@ -125,7 +123,7 @@ func TestInsertWindowData(t *testing.T) {
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
-			t.Fatal("inserting window data failed: ", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting window data failed for uuid:", uuid)
 		}
 	}
 
@@ -133,7 +131,7 @@ func TestInsertWindowData(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		window := log.getWindowStatus(uuid)
 		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
-			t.Fatal("uuid", uuid, "and corresponding window do not match")
+			t.Fatal("uuid", uuid + ":", "corresponding window do not match")
 		}
 	}
 
@@ -149,7 +147,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, NOT_STARTED)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
@@ -157,7 +155,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		uuidStatus := log.getUuidMetadataStatus(uuid)
 		if uuidStatus != NOT_STARTED {
-			t.Fatal(uuid, "should have status NOT_STARTED")
+			t.Fatal("uuid", uuid + ":", "should have status NOT_STARTED")
 		}
 	}
 
@@ -165,7 +163,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, WRITE_START)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
@@ -173,7 +171,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		uuidStatus := log.getUuidMetadataStatus(uuid)
 		if uuidStatus != WRITE_START {
-			t.Fatal(uuid, "should have status WRITE_START")
+			t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 		}
 	}
 
@@ -181,7 +179,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
@@ -189,7 +187,7 @@ func TestInsertSimpleUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		uuidStatus := log.getUuidMetadataStatus(uuid)
 		if uuidStatus != WRITE_COMPLETE {
-			t.Fatal(uuid, "should have status WRITE_COMPLETE")
+			t.Fatal("uuid", uuid + ":", "should have status WRITE_COMPLETE")
 		}
 	}
 
@@ -212,7 +210,7 @@ func TestInsertStripedUuidMetadata(t *testing.T) {
 			err = log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 		}
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
@@ -221,15 +219,15 @@ func TestInsertStripedUuidMetadata(t *testing.T) {
 		uuidStatus := log.getUuidMetadataStatus(uuid)
 		if (i % 3 == 0) {
 			if uuidStatus != NOT_STARTED {
-				t.Fatal(uuid, "should have status NOT_STARTED")
+				t.Fatal("uuid", uuid + ":", "should have status NOT_STARTED")
 			}
 		} else if i % 3 == 1 {
 			if uuidStatus != WRITE_START {
-				t.Fatal(uuid, "should have status WRITE_START")
+				t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 			}
 		} else {
 			if uuidStatus != WRITE_COMPLETE {
-				t.Fatal(uuid, "should have status WRITE_COMPLETE")
+				t.Fatal("uuid", uuid + ":", "should have status WRITE_COMPLETE")
 			}
 		}
 		
@@ -247,14 +245,14 @@ func TestUpdateUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, NOT_STARTED)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		if log.getUuidMetadataStatus(uuid) != NOT_STARTED {
-			t.Fatal(uuid, "should have status NOT_STARTED")
+			t.Fatal("uuid", uuid + ":", "should have status NOT_STARTED")
 		}
 	}
 
@@ -262,14 +260,14 @@ func TestUpdateUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, WRITE_START)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		if log.getUuidMetadataStatus(uuid) != WRITE_START {
-			t.Fatal(uuid, "should have status WRITE_START")
+			t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 		}
 	}
 
@@ -277,14 +275,14 @@ func TestUpdateUuidMetadata(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		if log.getUuidMetadataStatus(uuid) != WRITE_COMPLETE {
-			t.Fatal(uuid, "should have status WRITE_START")
+			t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 		}
 	}
 
@@ -306,7 +304,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 			}
 			err := log.updateUuidTimeseriesStatus(slot, NOT_STARTED)
 			if err != nil {
-				t.Fatal("inserting timeseries data failed", uuid)
+				t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
 			}
 		}	
 	}
@@ -320,7 +318,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 				EndTime: int64(time + 1),
 			}
 			if log.getUuidTimeseriesStatus(slot) != NOT_STARTED {
-				t.Fatal(uuid, "should have status NOT_STARTED")
+				t.Fatal("uuid", uuid + ":", "should have status NOT_STARTED")
 			}
 		}
 	}
@@ -335,7 +333,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 			}
 			err := log.updateUuidTimeseriesStatus(slot, WRITE_START)
 			if err != nil {
-				t.Fatal("inserting timeseries data failed", uuid)
+				t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
 			}
 		}	
 	}
@@ -349,7 +347,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 				EndTime: int64(time + 1),
 			}
 			if log.getUuidTimeseriesStatus(slot) != WRITE_START {
-				t.Fatal(uuid, "should have status WRITE_START")
+				t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 			}
 		}
 	}
@@ -364,7 +362,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 			}
 			err := log.updateUuidTimeseriesStatus(slot, WRITE_COMPLETE)
 			if err != nil {
-				t.Fatal("inserting timeseries data failed", uuid)
+				t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
 			}
 		}	
 	}
@@ -378,7 +376,7 @@ func TestInsertSimpleUuidTimeseriesData(t *testing.T) {
 				EndTime: int64(time + 1),
 			}
 			if log.getUuidTimeseriesStatus(slot) != WRITE_COMPLETE {
-				t.Fatal(uuid, "should have status WRITE_COMPLETE")
+				t.Fatal("uuid", uuid + ":", "should have status WRITE_COMPLETE")
 			}
 		}
 	}
@@ -409,7 +407,7 @@ func TestInsertStripedUuidTimeseriesData(t *testing.T) {
 				err = log.updateUuidTimeseriesStatus(slot, WRITE_COMPLETE)
 			}
 			if err != nil {
-				t.Fatal("inserting timeseries data failed", uuid)
+				t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
 			}
 		}
 	}
@@ -426,15 +424,15 @@ func TestInsertStripedUuidTimeseriesData(t *testing.T) {
 			mod := (i + time) % 3
 			if mod == 0 {
 				if log.getUuidTimeseriesStatus(slot) != NOT_STARTED {
-					t.Fatal(uuid, "should have status NOT_STARTED")
+					t.Fatal("uuid", uuid + ":", "should have status NOT_STARTED")
 				}			
 			} else if mod == 1 {
 				if log.getUuidTimeseriesStatus(slot) != WRITE_START {
-					t.Fatal(uuid, "should have status WRITE_START")
+					t.Fatal("uuid", uuid + ":", "should have status WRITE_START")
 				}
 			} else {
 				if log.getUuidTimeseriesStatus(slot) != WRITE_COMPLETE {
-					t.Fatal(uuid, "should have status WRITE_COMPLETE")
+					t.Fatal("uuid", uuid + ":", "should have status WRITE_COMPLETE")
 				}
 			}
 		}
@@ -458,13 +456,13 @@ func TestRetrieveNonexistentWindowKey(t *testing.T) {
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
-			t.Fatal("inserting window data failed: ", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting window data failed: ")
 		}
 	}
 
 	uuid := strconv.Itoa(1000)
 	if log.getWindowStatus(uuid) != nil {
-		t.Fatal(uuid, "should not exist but it does")
+		t.Fatal("uuid", uuid + ":", "should not exist but it does")
 	}
 
 	testTeardown()
@@ -480,13 +478,13 @@ func TestRetrieveNonexistentUuidMetadataKey(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		err := log.updateUuidMetadataStatus(uuid, NOT_STARTED)
 		if err != nil {
-			t.Fatal("inserting metadata failed", uuid)
+			t.Fatal("uuid", uuid + ":", "inserting metadata failed")
 		}
 	}
 
 	uuid := strconv.Itoa(100)
 	if log.getUuidMetadataStatus(uuid) != NIL {
-		t.Fatal(uuid, "should not exist but it does")	
+		t.Fatal("uuid", uuid + ":", "should not exist but it does")	
 	}
 
 	testTeardown()
@@ -507,7 +505,7 @@ func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 			}
 			err := log.updateUuidTimeseriesStatus(slot, NOT_STARTED)
 			if err != nil {
-				t.Fatal("inserting timeseries data failed", uuid)
+				t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
 			}
 		}	
 	}
@@ -520,7 +518,7 @@ func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 	}
 
 	if log.getUuidTimeseriesStatus(badSlot) != NIL {
-		t.Fatal(badSlot.Uuid, "should not exist but it does")
+		t.Fatal("uuid", badSlot.Uuid + ":", "should not exist but it does")
 	}
 
 	//bad start time
@@ -531,7 +529,7 @@ func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 	}
 
 	if log.getUuidTimeseriesStatus(badSlot) != NIL {
-		t.Fatal(badSlot.Uuid, "should not exist but it does")
+		t.Fatal("uuid", badSlot.Uuid + ":", "should not exist but it does")
 	}
 
 	//bad end time
@@ -542,7 +540,7 @@ func TestRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 	}
 
 	if log.getUuidTimeseriesStatus(badSlot) != NIL {
-		t.Fatal(badSlot.Uuid, "should not exist but it does")
+		t.Fatal("uuid", badSlot.Uuid + ":", "should not exist but it does")
 	}
 
 	testTeardown()
