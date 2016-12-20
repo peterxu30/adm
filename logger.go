@@ -109,12 +109,12 @@ func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
 
 /* Window Data Functions */
 
-func (logger *Logger) getWindowStatus(uuid string) *WindowData {
+func (logger *Logger) getWindowStatus(uuid string) *Window {
 	body := logger.get(WINDOW_BUCKET, []byte(uuid))
 	return convertFromBinaryToWindow(body)
 }
 
-func (logger *Logger) updateWindowStatus(uuid string, window *WindowData) error {
+func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
 	buf := convertToByteArray(*window)
 	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
 }
@@ -186,12 +186,12 @@ func convertToByteArray(data interface{}) []byte {
 }
 
 /* Converts byte array into WindowData struct */
-func convertFromBinaryToWindow(body []byte) *WindowData {
+func convertFromBinaryToWindow(body []byte) *Window {
 	if body == nil {
 		return nil
 	}
 
-	var window WindowData
+	var window Window
 	buf := bytes.NewBuffer(body)
 	dec := gob.NewDecoder(buf)
 	err := dec.Decode(&window)

@@ -209,19 +209,14 @@ func (collection *DataCollection) WriteAllDataBlocks(metaDest string, timeseries
 	wg.Wait()
 }
 
-type WindowData struct {
-    Uuid string `json:"uuid"`
-    Readings [][]int64
-}
-
-func (collection *DataCollection) getAllWindowData() []*WindowData {
+func (collection *DataCollection) getAllWindowData() []*Window {
     fmt.Println("get all window data")
     return collection.getSomeWindowData(0, len(collection.Uuids))
 }
 
-func (collection *DataCollection) getSomeWindowData(start int, end int) []*WindowData {
+func (collection *DataCollection) getSomeWindowData(start int, end int) []*Window {
     fmt.Println("some window data: ", start, end)
-    windows := make([]*WindowData, end-start)
+    windows := make([]*Window, end-start)
     for i := start; i < end; i++ {
         // fmt.Println("Get some window data: ", i)
         windows[i-start] = collection.getWindowData(collection.Uuids[i])
@@ -232,62 +227,15 @@ func (collection *DataCollection) getSomeWindowData(start int, end int) []*Windo
 /* Helper method that finds the number of timeseriesdata for a given uuid. Used for
  * determining how many files to write timeseriesdata to.
  */
-func (collection *DataCollection) getWindowData(uuid string) *WindowData {
+func (collection *DataCollection) getWindowData(uuid string) *Window {
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
     body := makeQuery(collection.Url, query)
-    var windows [1]WindowData
+    var windows [1]Window
     json.Unmarshal(body, &windows) //check error
     window := windows[0]
     // fmt.Println("WINDOW:", window)
     // fmt.Println("WINDOW", string(body))
     return &window
-}
-
-type TimeSlot struct {
-    Uuid string
-    StartTime int64
-    EndTime int64
-    Count int
-}
-
-func (window *WindowData) getTimeSlots() []*TimeSlot {
-    var slots = make([]*TimeSlot, len(window.Readings))
-    // fmt.Println("getTimeSlots window:", window)
-    length := len(window.Readings)
-    for i := 0; i < length; i++ {
-        reading := window.Readings[i]
-        startTime := reading[0]
-        endTime := int64(-1) //means end time is now
-        if i < length - 1 {
-            endTime = window.Readings[i + 1][0]
-        }
-
-        var slot TimeSlot = TimeSlot {
-            Uuid: window.Uuid,
-            StartTime: startTime,
-            EndTime: endTime,
-            Count: int(reading[1]),
-        }
-        slots[i] = &slot
-    }
-
-
-    // for _, reading := range window.Readings {
-    //     if len(reading) < 0 {
-    //         continue
-    //     }
-    //     fmt.Println("TimeSlot: ", reading)
-    //     // fmt.Println("getTimeSlots reading:", reading)
-    //     var slot TimeSlot = TimeSlot {
-    //         Uuid: window.Uuid,
-    //         StartTime: reading[0],
-    //         EndTime: reading[0] + YearNS,
-    //         Count: int(reading[1]),
-    //     }
-    //     slots[count] = &slot
-    //     count++
-    // }
-    return slots
 }
 
 func (collection *DataCollection) NewWriteDataBlock(start int, end int, wg *sync.WaitGroup) {
