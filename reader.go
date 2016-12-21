@@ -1,7 +1,7 @@
 /*
 The Reader interface is designed so that every method is designed for sequential operation.
 It is up to the calling function to manage any parallelization.
-Reader-implemented classes are designed to read in raw bytes and leave any unmarshalling to Writer-implemented classes.
+Reader-implemented objects are designed to read in raw bytes and leave any unmarshalling to Writer-implemented classes.
 */
 
 package main
@@ -14,7 +14,7 @@ type DataTuple struct {
 
 
 type Reader interface {
-    readUuids() []string
+    readUuids() []string //relatively small size. can be accomplished without use of channels.
     readMetadata(uuids []string, dataChan chan DataTuple)
     readTimeseriesData(start *TimeSlot, fullUuids []string, end *TimeSlot, dataChan chan DataTuple)
 }

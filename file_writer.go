@@ -16,7 +16,7 @@ func newFileWriter() *FileWriter {
 	}
 }
 
-func (w *FileWriter) writeUuids() {}
+func (w *FileWriter) writeUuids(uuids []string) {}
 
 func (w *FileWriter) writeMetadata(dataChan chan DataTuple) {}
 
