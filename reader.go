@@ -15,6 +15,6 @@ type DataTuple struct {
 
 type Reader interface {
     readUuids() []string //relatively small size. can be accomplished without use of channels.
-    readMetadata(uuids []string, dataChan chan DataTuple)
-    readTimeseriesData(start *TimeSlot, fullUuids []string, end *TimeSlot, dataChan chan DataTuple)
+    readMetadata(uuids []string, dataChan chan *DataTuple)
+    readTimeseriesData(slots []*TimeSlot, dataChan chan *DataTuple)
 }

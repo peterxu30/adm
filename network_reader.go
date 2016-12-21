@@ -6,6 +6,7 @@ import (
     "fmt"
     "io/ioutil"
     "net/http"
+    "strconv"
 )
 
 type NetworkReader struct {
@@ -37,24 +38,31 @@ func (r *NetworkReader) readUuids() []string {
     return uuids
 }
 
-func (r *NetworkReader) readMetadata(uuids []string, metadataChan chan DataTuple) {
+func (r *NetworkReader) readMetadata(uuids []string, dataChan chan *DataTuple) {
     for _, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
         }
         r.log.updateUuidMetadataStatus(uuid, WRITE_START)
-        mQuery := "select * where uuid='" + uuid + "'"
-        mBody := r.makeQuery(r.queryUrl, mQuery)
-        mTuple := DataTuple {
-            uuid: uuid,
-            data: mBody,
-        }
-        metadataChan <- mTuple
+        query := "select * where uuid='" + uuid + "'"
+        body := r.makeQuery(r.queryUrl, query)
+        dataChan <- r.makeDataTuple(uuid, body)
     }
 }
 
-func (r *NetworkReader) readTimeseriesData(start *TimeSlot, fullUuids []string, end *TimeSlot, timeseriesChan chan DataTuple) {
-
+//TODO: Batch the queries
+func (r *NetworkReader) readTimeseriesData(slots []*TimeSlot, dataChan chan *DataTuple) {
+    for _, slot := range slots {
+        if r.log.getUuidTimeseriesStatus(slot) == WRITE_COMPLETE {
+            continue
+        }
+        r.log.updateUuidTimeseriesStatus(slot, WRITE_START)
+        startTime := strconv.FormatInt(slot.startTime, 10)
+        endTime := strconv.FormatInt(slot.endTime, 10)
+        query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.uuid + "'"
+        body := r.makeQuery(r.queryUrl, query)
+        dataChan <- r.makeDataTuple(slot.uuid, body)
+    }
 }
 
 /* General purpose function to make an HTTP POST request to the specified url
@@ -84,4 +92,11 @@ func (r *NetworkReader) makeQuery(url string, queryString string) []byte {
         panic(err)
     }
     return body
+}
+
+func (r *NetworkReader) makeDataTuple(uuid string, data []byte) *DataTuple {
+    return &DataTuple {
+        uuid: uuid,
+        data: data,
+    }
 }
