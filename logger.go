@@ -114,6 +114,24 @@ func (logger *Logger) getWindowStatus(uuid string) *Window {
 	return convertFromBinaryToWindow(body)
 }
 
+func (logger *Logger) getWindowKeySet() []string {
+	byteKeys := logger.keySet(WINDOW_BUCKET)
+	keys := make([]string, len(byteKeys))
+	for i, byteKey := range byteKeys {
+		keys[i] = string(byteKey)
+	}
+	return keys
+}
+
+func (logger *Logger) getWindowEntrySet() []*Window {
+	byteEntries := logger.entrySet(WINDOW_BUCKET)
+	entries := make([]*Window, len(byteEntries))
+	for i, byteEntry := range byteEntries {
+		entries[i] = convertFromBinaryToWindow(byteEntry)
+	}
+	return entries
+}
+
 func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
 	buf := convertToByteArray(*window)
 	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
@@ -161,6 +179,32 @@ func (logger *Logger) put(bucket string, key []byte, value []byte) error {
 		err := b.Put(key, value)
 		return err
 	})
+}
+
+func (logger *Logger) keySet(bucket string) [][]byte{
+	keys := [][]byte{}
+	logger.log.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			keys = append(keys, k)
+		}
+		return nil
+	})
+	return keys
+}
+
+func (logger *Logger) entrySet(bucket string) [][]byte {
+	values := [][]byte{}
+	logger.log.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			values = append(values, v)
+		}
+		return nil
+	})
+	return values
 }
 
 func (logger *Logger) bucketByteSize(bucket string) int64 {

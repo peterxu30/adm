@@ -81,18 +81,20 @@ func NewDataCollection(url string) *DataCollection {
 }
 
 func (collection *DataCollection) ReadAllUuids() {
+    if (collection.Log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
+        fmt.Println("UUID Log write complete")
+        collection.Uuids = collection.Log.getWindowKeySet()
+        return
+    }
 	body := makeQuery(collection.Url, "select distinct uuid")
 	json.Unmarshal(body, &(collection.Uuids))
+    collection.AddAllUuidsToLog()
 }
 
 /* Adds all UUIDs from collection.Uuids to the Bolt log.
  * Uses go routines
  */
 func (collection *DataCollection) AddAllUuidsToLog() {
-	if collection.Log.getLogMetadata("read_uuids") == WRITE_COMPLETE {
-		fmt.Println("UUID Log write complete")
-		return
-	}
 	length := len(collection.Uuids)
 	numRoutinesFloat := float64(length) / float64(ChunkSize)
 	numRoutines := length / ChunkSize

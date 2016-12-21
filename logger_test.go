@@ -108,7 +108,7 @@ func TestLogUpdateMetadataWindowsFetchedKey(t *testing.T) {
 	testTeardown()
 }
 
-func TestLogInsertWindowData(t *testing.T) {
+func TestLogInsertWindow(t *testing.T) {
 	testStartup()
 
 	log := newTestLog()
@@ -117,7 +117,7 @@ func TestLogInsertWindowData(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
-		window := &WindowData {
+		window := &Window {
 			Uuid: uuid,
 			Readings: reading,
 		}
@@ -132,6 +132,84 @@ func TestLogInsertWindowData(t *testing.T) {
 		window := log.getWindowStatus(uuid)
 		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
 			t.Fatal("uuid", uuid + ":", "corresponding window do not match")
+		}
+	}
+
+	testTeardown()
+}
+
+func TestLogGetWindowKeySet(t *testing.T) {
+	testStartup()
+
+	log := newTestLog()
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		reading := make([][]int64, 1)
+		reading[0] = []int64{int64(i)}
+		window := &Window {
+			Uuid: uuid,
+			Readings: reading,
+		}
+		err := log.updateWindowStatus(uuid, window)
+		if err != nil {
+			t.Fatal("uuid", uuid + ":", "inserting window data failed for uuid:", uuid)
+		}
+	}
+
+	keySet := log.getWindowKeySet()
+	bindings := make(map[int]string, len(keySet))
+
+	for _, key := range keySet {
+		val, err := strconv.Atoi(key)
+		if err != nil {
+			t.Fatal("error in key to int conversion")
+		}
+		bindings[val] = key
+	}
+
+	for i := 0; i < 1000; i++ {
+		key := bindings[i]
+		if key != strconv.Itoa(i) {
+			t.Fatal("key", key, "should be", i)
+		}
+	}
+
+	testTeardown()
+}
+
+func TestLogGetWindowEntrySet(t *testing.T) {
+	testStartup()
+
+	log := newTestLog()
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		reading := make([][]int64, 1)
+		reading[0] = []int64{int64(i)}
+		window := &Window {
+			Uuid: uuid,
+			Readings: reading,
+		}
+		err := log.updateWindowStatus(uuid, window)
+		if err != nil {
+			t.Fatal("uuid", uuid + ":", "inserting window data failed for uuid:", uuid)
+		}
+	}
+
+	entrySet := log.getWindowEntrySet()
+	bindings := make(map[int]*Window, len(entrySet))
+
+	for _, entry := range entrySet {
+		val, err := strconv.Atoi(entry.Uuid)
+		if err != nil {
+			t.Fatal("error in entry to int conversion")
+		}
+		bindings[val] = entry
+	}
+
+	for i := 0; i < 1000; i++ {
+		entry := bindings[i]
+		if entry.Uuid != strconv.Itoa(i) || entry.Readings[0][0] != int64(i) {
+			t.Fatal("entry contents are not correct")
 		}
 	}
 
@@ -450,7 +528,7 @@ func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 		uuid := strconv.Itoa(i)
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
-		window := &WindowData {
+		window := &Window {
 			Uuid: uuid,
 			Readings: reading,
 		}
