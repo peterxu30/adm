@@ -18,6 +18,6 @@ func newFileWriter() *FileWriter {
 
 func (w *FileWriter) writeUuids() {}
 
-func (w *FileWriter) writeMetadata(metadataChan chan MetadataTuple) {}
+func (w *FileWriter) writeMetadata(dataChan chan DataTuple) {}
 
-func (w *FileWriter) writeTimeseriesData() {}
+func (w *FileWriter) writeTimeseriesData(dataChan chan DataTuple) {}

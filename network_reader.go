@@ -30,13 +30,14 @@ func (r *NetworkReader) readUuids() []string {
     json.Unmarshal(body, &uuids)
 
     for _, uuid := range uuids {
+        r.log.updateWindowStatus(uuid, nil)
         r.log.updateUuidMetadataStatus(uuid, NOT_STARTED)
     }
     r.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
     return uuids
 }
 
-func (r *NetworkReader) readMetadata(uuids []string, metadataChan chan MetadataTuple) {
+func (r *NetworkReader) readMetadata(uuids []string, metadataChan chan DataTuple) {
     for _, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
@@ -44,15 +45,15 @@ func (r *NetworkReader) readMetadata(uuids []string, metadataChan chan MetadataT
         r.log.updateUuidMetadataStatus(uuid, WRITE_START)
         mQuery := "select * where uuid='" + uuid + "'"
         mBody := r.makeQuery(r.queryUrl, mQuery)
-        mTuple := MetadataTuple {
+        mTuple := DataTuple {
             uuid: uuid,
-            metadata: mBody,
+            data: mBody,
         }
         metadataChan <- mTuple
     }
 }
 
-func (r *NetworkReader) readTimeseriesData() {
+func (r *NetworkReader) readTimeseriesData(start *TimeSlot, fullUuids []string, end *TimeSlot, timeseriesChan chan DataTuple) {
 
 }
 

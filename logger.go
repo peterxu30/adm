@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
-	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
 )
@@ -134,10 +133,12 @@ func (logger *Logger) getWindowEntrySet() []*Window {
 }
 
 func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
-	if (window == nil) {
-		return errors.New("window cannot be nil")
+	var buf []byte
+	if window == nil {
+		buf = nil
+	} else {
+		buf = convertToByteArray(*window)
 	}
-	buf := convertToByteArray(*window)
 	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
 }
 
@@ -233,6 +234,10 @@ func (logger *Logger) bucketByteSize(bucket string) int64 {
  * Used to convert LogStatus to []byte.
  */
 func convertToByteArray(data interface{}) []byte {
+	if data == nil {
+		return nil
+	}
+
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	err := enc.Encode(data)
@@ -243,13 +248,13 @@ func convertToByteArray(data interface{}) []byte {
 }
 
 /* Converts byte array into WindowData struct */
-func convertFromBinaryToWindow(body []byte) *Window {
-	if body == nil {
+func convertFromBinaryToWindow(data []byte) *Window {
+	if data == nil {
 		return nil
 	}
 
 	var window Window
-	buf := bytes.NewBuffer(body)
+	buf := bytes.NewBuffer(data)
 	dec := gob.NewDecoder(buf)
 	err := dec.Decode(&window)
 	if err != nil {
@@ -259,13 +264,13 @@ func convertFromBinaryToWindow(body []byte) *Window {
 }
 
 /* Converts byte array into LogStatus */
-func convertFromBinaryToLogStatus(body []byte) LogStatus {
-	if body == nil {
+func convertFromBinaryToLogStatus(data []byte) LogStatus {
+	if data == nil {
 		return NIL
 	}
 
 	var status LogStatus
-	buf := bytes.NewBuffer(body)
+	buf := bytes.NewBuffer(data)
 	dec := gob.NewDecoder(buf)
 	err := dec.Decode(&status)
 	if err != nil {

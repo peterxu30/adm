@@ -1,4 +1,17 @@
+/*
+The Writer interface is designed so that every method is designed for sequential operation.
+It is up to the calling function to manage any parallelization.
+Writer-implemented objects read in raw bytes and do whatever unmarshalling is necessary. 
+*/
+
 package main
+
+type Metadata struct {
+    path       string
+    uuid       string `json:"uuid"`
+    properties interface{}
+    metadata   interface{}
+}
 
 type TimeseriesData struct {
     uuid     string
@@ -7,11 +20,6 @@ type TimeseriesData struct {
 
 type Writer interface { //allows writing to file or to endpoint
 	writeUuids()
-	writeMetadata(metadataChan chan MetadataTuple)
-	writeTimeseriesData()
-    // WriteAllUuids(dest string)    //mainly for logging purposes
-    // WriteAllMetadata(dest string) //dest can be a url or a file name
-    // WriteSomeMetadata(dest string, start int, end int)
-    // WriteAllTimeseriesData(dest string)
-    // WriteSomeTimeseriesData(dest string, start int, end int)
+	writeMetadata(dataChan chan DataTuple)
+	writeTimeseriesData(dataChan chan DataTuple)
 }
