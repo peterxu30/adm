@@ -1,6 +1,7 @@
 # adm
 Archived Data Migrator
 For Software Defined Buildings
+Currently in the process of a major redesign for improved clarity and performance. Readme may not reflect new changes.
 
 ##Program Flow
 adm uses several Go routines to simultaneously query the specified URL and writes the output to a Go channel.
