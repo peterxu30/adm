@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -97,4 +99,32 @@ func TestSyncReleaseSimpleEmpty(t *testing.T) {
 	if !(finished1 && finished2) {
 		t.Fatal("releasing an empty semaphore timed out", finished1, finished2)
 	}
+}
+
+func TestSyncBlocking(t *testing.T) {
+	s := newSema(5)
+	canRelease := false
+	baseline := runtime.NumGoroutine() + 1
+	numRoutinesMade := 0
+	go func(s *Sema, canRelease *bool, numRoutinesMade *int) {
+		for i := 0; i < 10; i++ {
+			s.acquire()
+			go func(s *Sema, canRelease *bool, numRoutinesMade *int) {
+				(*numRoutinesMade)++
+				for !(*canRelease) {
+					time.Sleep(time.Millisecond)
+				}
+				s.release()
+			}(s, canRelease, numRoutinesMade)
+		}
+
+	}(s, &canRelease, &numRoutinesMade)
+
+	time.Sleep(3 * time.Second)
+	limit := baseline + 5
+	total := runtime.NumGoroutine()
+	if total > limit && numRoutinesMade != 5 {
+		t.Fatal("there should be at most", limit, "go routines but there are", total)
+	}
+	canRelease = true
 }
