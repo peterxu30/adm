@@ -367,6 +367,39 @@ func TestLogUpdateUuidMetadata(t *testing.T) {
 	testTeardown()
 }
 
+func TestLogGetUuidMetadataKeySet(t *testing.T) {
+	testStartup()
+
+	log := newTestLog()
+	for i := 0; i < 1000; i++ {
+		uuid := strconv.Itoa(i)
+		err := log.updateUuidMetadataStatus(uuid, NOT_STARTED)
+		if err != nil {
+			t.Fatal("uuid", uuid + ":", "inserting metadata status failed for uuid:", uuid)
+		}
+	}
+
+	keySet := log.getUuidMetadataKeySet()
+	bindings := make(map[int]string, len(keySet))
+
+	for _, key := range keySet {
+		val, err := strconv.Atoi(key)
+		if err != nil {
+			t.Fatal("error in key to int conversion")
+		}
+		bindings[val] = key
+	}
+
+	for i := 0; i < 1000; i++ {
+		key := bindings[i]
+		if key != strconv.Itoa(i) {
+			t.Fatal("key", key, "should be", i)
+		}
+	}
+
+	testTeardown()
+}
+
 func TestLogInsertSimpleUuidTimeseriesData(t *testing.T) {
 	testStartup()
 

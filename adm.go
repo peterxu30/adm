@@ -49,4 +49,3 @@ func main() {
     adm := newADMManager(Url, 10, 10)
     adm.readAllUuids()
 }
-

@@ -22,15 +22,14 @@ func newNetworkReader(queryUrl string, log *Logger) *NetworkReader {
 
 func (r *NetworkReader) readUuids() []string {
     if (r.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
-        fmt.Println("UUID Log write complete")
-        return r.log.getWindowKeySet()
+        fmt.Println("uuids were previously read")
+        return r.log.getUuidMetadataKeySet()
     }
     var uuids []string
     body := r.makeQuery(r.queryUrl, "select distinct uuid")
     json.Unmarshal(body, &uuids)
 
     for _, uuid := range uuids {
-        r.log.updateWindowStatus(uuid, nil)
         r.log.updateUuidMetadataStatus(uuid, NOT_STARTED)
     }
     r.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
 )
@@ -133,6 +134,9 @@ func (logger *Logger) getWindowEntrySet() []*Window {
 }
 
 func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
+	if (window == nil) {
+		return errors.New("window cannot be nil")
+	}
 	buf := convertToByteArray(*window)
 	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
 }
@@ -142,6 +146,15 @@ func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
 func (logger *Logger) getUuidMetadataStatus(uuid string) LogStatus {
 	body := logger.get(UUID_METADATA_BUCKET, []byte(uuid))
 	return convertFromBinaryToLogStatus(body)
+}
+
+func (logger *Logger) getUuidMetadataKeySet() []string {
+	byteKeys := logger.keySet(UUID_METADATA_BUCKET)
+	keys := make([]string, len(byteKeys))
+	for i, byteKey := range byteKeys {
+		keys[i] = string(byteKey)
+	}
+	return keys
 }
 
 func (logger *Logger) updateUuidMetadataStatus(uuid string, status LogStatus) error {
