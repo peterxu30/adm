@@ -13,31 +13,31 @@ const (
 )
 
 type ADMManager struct {
-    log             *Logger
     url             string
     uuids           []string
     reader Reader
     writer Writer
     workers *Sema
-    openFiles *Sema
+    openIO *Sema
+    log             *Logger
 }
 
-func newADMManager(url string, workerSize int, openFileSize int) *ADMManager {
+func newADMManager(url string, workerSize int, openIO int) *ADMManager {
     log := newLogger()
-    reader := newNetworkReader(url, log) //TODO: dynamically choose appropriate reader/writer types
-    writer := newFileWriter()
+    reader := newNetworkReader(log) //TODO: dynamically choose appropriate reader/writer types
+    writer := newFileWriter(log)
     return &ADMManager{
-        log:      log,
         url:      url,
         reader: reader,
         writer: writer,
         workers: newSema(workerSize),
-        openFiles: newSema(openFileSize),
+        openIO: newSema(openIO),
+        log:      log,
     }
 }
 
 func (adm *ADMManager) readAllUuids() {
-    adm.uuids = adm.reader.readUuids()
+    adm.uuids = adm.reader.readUuids(adm.url)
 }
 
 func main() {

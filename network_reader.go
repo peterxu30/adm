@@ -10,24 +10,22 @@ import (
 )
 
 type NetworkReader struct {
-    queryUrl string
     log *Logger
 }
 
-func newNetworkReader(queryUrl string, log *Logger) *NetworkReader {
+func newNetworkReader(log *Logger) *NetworkReader {
     return &NetworkReader {
-        queryUrl: queryUrl,
         log: log,
     }
 }
 
-func (r *NetworkReader) readUuids() []string {
+func (r *NetworkReader) readUuids(src string) []string {
     if (r.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
         fmt.Println("uuids were previously read")
         return r.log.getUuidMetadataKeySet()
     }
     var uuids []string
-    body := r.makeQuery(r.queryUrl, "select distinct uuid")
+    body := r.makeQuery(src, "select distinct uuid")
     json.Unmarshal(body, &uuids)
 
     for _, uuid := range uuids {
@@ -38,31 +36,31 @@ func (r *NetworkReader) readUuids() []string {
     return uuids
 }
 
-func (r *NetworkReader) readMetadata(uuids []string, dataChan chan *DataTuple) {
+func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) {
     for _, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
         }
-        r.log.updateUuidMetadataStatus(uuid, WRITE_START)
         query := "select * where uuid='" + uuid + "'"
-        body := r.makeQuery(r.queryUrl, query)
-        dataChan <- r.makeDataTuple(uuid, body)
+        body := r.makeQuery(src, query)
+        dataChan <- r.makeMetadataTuple(uuid, body)
     }
+    close(dataChan)
 }
 
 //TODO: Batch the queries
-func (r *NetworkReader) readTimeseriesData(slots []*TimeSlot, dataChan chan *DataTuple) {
+func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) {
     for _, slot := range slots {
         if r.log.getUuidTimeseriesStatus(slot) == WRITE_COMPLETE {
             continue
         }
-        r.log.updateUuidTimeseriesStatus(slot, WRITE_START)
         startTime := strconv.FormatInt(slot.startTime, 10)
         endTime := strconv.FormatInt(slot.endTime, 10)
         query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.uuid + "'"
-        body := r.makeQuery(r.queryUrl, query)
-        dataChan <- r.makeDataTuple(slot.uuid, body)
+        body := r.makeQuery(src, query)
+        dataChan <- r.makeTimeseriesTuple(slot, body)
     }
+    close(dataChan)
 }
 
 /* General purpose function to make an HTTP POST request to the specified url
@@ -74,29 +72,36 @@ func (r *NetworkReader) makeQuery(url string, queryString string) []byte {
     query := []byte(queryString)
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
     if err != nil {
-        fmt.Println("panic 1")
+        fmt.Println("could not create new request")
         panic(err)
     }
 
     client := &http.Client{}
     resp, err := client.Do(req)
     if err != nil {
-        fmt.Println("panic 2")
+        fmt.Println("failed to execute request")
         panic(err)
     }
 
     defer resp.Body.Close()
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        fmt.Println("panic 3")
+        fmt.Println("failed to read response body")
         panic(err)
     }
     return body
 }
 
-func (r *NetworkReader) makeDataTuple(uuid string, data []byte) *DataTuple {
-    return &DataTuple {
+func (r *NetworkReader) makeMetadataTuple(uuid string, data []byte) *MetadataTuple {
+    return &MetadataTuple {
         uuid: uuid,
+        data: data,
+    }
+}
+
+func (r *NetworkReader) makeTimeseriesTuple(slot *TimeSlot, data []byte) *TimeseriesTuple {
+    return &TimeseriesTuple {
+        slot: slot,
         data: data,
     }
 }

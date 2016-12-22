@@ -2,6 +2,7 @@
 The Writer interface is designed so that every method is designed for sequential operation.
 It is up to the calling function to manage any parallelization.
 Writer-implemented objects read in raw bytes and do whatever unmarshalling is necessary. 
+Writer methods should be idempotent.
 */
 
 package main
@@ -19,7 +20,7 @@ type TimeseriesData struct {
 }
 
 type Writer interface { //allows writing to file or to endpoint
-	writeUuids(uuids []string) //relatively small size. can be accomplished without use of channels.
-	writeMetadata(dataChan chan *DataTuple)
-	writeTimeseriesData(dataChan chan *DataTuple)
+	writeUuids(dest string, uuids []string) //relatively small size. can be accomplished without use of channels.
+	writeMetadata(dest string, dataChan chan *MetadataTuple)
+	writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple)
 }

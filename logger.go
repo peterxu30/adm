@@ -28,7 +28,10 @@ const (
 
 	/* Metadata bucket keys */
 	UUIDS_FETCHED = "uuids_fetched"
+	UUIDS_WRITTEN = "uuids_written"
 	WINDOWS_FETCHED = "windows_fetched"
+	METADATA_WRITTEN = "metadata_written"
+	TIMESERIES_WRITTEN = "timeseries_written"
 )
 
 type Logger struct {
@@ -87,9 +90,21 @@ func newLoggerWithName(name string) *Logger {
 		// fmt.Println("uuids_fetched initialized")
 	}
 
+	if logger.getLogMetadata(UUIDS_WRITTEN) == NIL {
+		logger.updateLogMetadata(UUIDS_WRITTEN, NOT_STARTED)
+	}
+
 	if logger.getLogMetadata(WINDOWS_FETCHED) == NIL {
 		logger.updateLogMetadata(WINDOWS_FETCHED, NOT_STARTED)
 		// fmt.Println("write_started initialized")
+	}
+
+	if logger.getLogMetadata(METADATA_WRITTEN) == NIL {
+		logger.updateLogMetadata(METADATA_WRITTEN, NOT_STARTED)
+	}
+
+	if logger.getLogMetadata(TIMESERIES_WRITTEN) == NIL {
+		logger.updateLogMetadata(TIMESERIES_WRITTEN, NOT_STARTED)
 	}
 
 	return &logger
