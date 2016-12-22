@@ -24,6 +24,7 @@ func (r *NetworkReader) readUuids(src string) []string {
         fmt.Println("uuids were previously read")
         return r.log.getUuidMetadataKeySet()
     }
+
     var uuids []string
     body := r.makeQuery(src, "select distinct uuid")
     json.Unmarshal(body, &uuids)
@@ -32,15 +33,79 @@ func (r *NetworkReader) readUuids(src string) []string {
         r.log.updateWindowStatus(uuid, nil)
         r.log.updateUuidMetadataStatus(uuid, NOT_STARTED)
     }
-    r.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
+
     return uuids
 }
 
+func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
+    windows := make([]*Window, len(uuids))
+    for i, uuid := range uuids {
+        windows[i] = r.readWindow(src, uuid)
+    }
+    return windows
+}
+
+func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window {
+    windows := make([]*Window, len(uuids))
+    query := "select window(365d) data in (0, now) where uuid ="
+    first := true
+    var readBefore []*Window
+    for _, uuid := range uuids {
+        w := r.log.getWindowStatus(uuid)
+        if w != nil {
+            readBefore = append(readBefore, w)
+            continue
+        }
+        if !first {
+            query += " or uuid = "
+        } else {
+            first = false
+        }
+        query += "'" + uuid + "'"
+    }
+    body := r.makeQuery(src, query)
+    fmt.Println(query)
+    err := json.Unmarshal(body, &windows)
+    if err != nil {
+        fmt.Println("batch window read failed")
+    }
+
+    for _, window := range readBefore {
+        windows = append(windows, window)
+    } 
+
+    return windows
+}
+
+func (r *NetworkReader) readWindow(src string, uuid string) *Window {
+    w := r.log.getWindowStatus(uuid)
+    if w != nil {
+        return w
+    }
+
+    query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
+    body := r.makeQuery(src, query)
+    ioutil.WriteFile("testy.txt", body, 0644) //TODO: REMOVE
+    var windows [1]Window
+    err := json.Unmarshal(body, &windows)
+    if err != nil {
+        fmt.Println("window", uuid + ":", "could not be read")
+        panic(err)
+    }
+    window := windows[0]
+    return &window
+}
+
 func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) {
+    if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
+        return
+    }
+
     for _, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
         }
+
         query := "select * where uuid='" + uuid + "'"
         body := r.makeQuery(src, query)
         dataChan <- r.makeMetadataTuple(uuid, body)
@@ -50,10 +115,15 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
 
 //TODO: Batch the queries
 func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) {
+    if r.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
+        return
+    }
+
     for _, slot := range slots {
         if r.log.getUuidTimeseriesStatus(slot) == WRITE_COMPLETE {
             continue
         }
+
         startTime := strconv.FormatInt(slot.StartTime, 10)
         endTime := strconv.FormatInt(slot.EndTime, 10)
         query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"

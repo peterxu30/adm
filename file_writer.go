@@ -35,8 +35,6 @@ func (w *FileWriter) writeUuids(dest string, uuids []string) {
 	if err != nil {
 		panic(err)
 	}
-
-	w.log.updateLogMetadata(UUIDS_WRITTEN, WRITE_COMPLETE)
 }
 
 func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
@@ -57,6 +55,7 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 	}
 
 	first := true
+	wrote := false
 	for tuple := range dataChan {
 		if w.log.getUuidMetadataStatus(tuple.uuid) == WRITE_COMPLETE {
 			continue
@@ -74,12 +73,15 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 		if err != nil {
 			panic(err)
 		}
+		wrote = true
 		w.log.updateUuidMetadataStatus(tuple.uuid, WRITE_COMPLETE)
 	}
 
-	_, err = f.Write([]byte("]"))
-	if err != nil {
-		panic(err)
+	if wrote {
+		_, err = f.Write([]byte("]"))
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	err = f.Close()
@@ -106,6 +108,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	}
 
 	first := true
+	wrote := false
 	for tuple := range dataChan {
 		if w.log.getUuidTimeseriesStatus(tuple.slot) == WRITE_COMPLETE {
 			continue
@@ -124,12 +127,15 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 		if err != nil {
 			panic(err)
 		}
+		wrote = true
 		w.log.updateUuidTimeseriesStatus(tuple.slot, WRITE_COMPLETE)
 	}
 
-	_, err = f.Write([]byte("]"))
-	if err != nil {
-		panic(err)
+	if wrote {
+		_, err = f.Write([]byte("]"))
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	err = f.Close()

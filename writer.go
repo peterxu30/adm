@@ -3,6 +3,7 @@ The Writer interface is designed so that every method is designed for sequential
 It is up to the calling function to manage any parallelization.
 Writer-implemented objects read in raw bytes and do whatever unmarshalling is necessary. 
 Writer methods should be idempotent.
+Updating logMetadata should be handled by the caller.
 */
 
 package main

@@ -1,7 +1,7 @@
 package main
 
 import (
-    // "fmt"
+    "fmt"
     "log"
     "runtime"
     "time"
@@ -49,5 +49,10 @@ func main() {
     }()
     adm := newADMManager(Url, 10, 10)
     adm.readAllUuids()
+
+    //testing
+    // ids := []string{"11d93edc-9a0e-5896-8cbe-4888ba52dcbd", "12a4db87-67e1-5fc7-99fa-33b01e32c0b4"}
+    fmt.Println(adm.reader.readWindow(adm.url, "11d93edc-9a0e-5896-8cbe-4888ba52dcbd"))
+    // fmt.Println(adm.reader.readWindowsBatched(adm.url, ids))
     // fmt.Println(adm.uuids)
 }

@@ -86,6 +86,53 @@ func TestFWWriteMetadata(t *testing.T) {
 	testFWTeardown()
 }
 
+func TestFWWriteNoDuplicatesMetadata(t *testing.T) {
+	testFWStartUp()
+
+	fw := newTestFileWriter()
+
+	dataChan := make(chan *MetadataTuple, 5)
+
+	for i := 0; i < 4; i++ {
+		uuid := strconv.Itoa(i)
+		tup := &MetadataTuple {
+        	uuid: uuid,
+        	data: []byte("uuid: " + uuid),
+    	}
+    	dataChan <- tup
+	}
+	close(dataChan)
+	fw.writeMetadata(TEST_FILE, dataChan)
+
+	dataChan = make(chan *MetadataTuple, 5)
+
+	for i := 0; i < 4; i++ {
+		uuid := strconv.Itoa(i)
+		tup := &MetadataTuple {
+        	uuid: uuid,
+        	data: []byte("uuid: " + uuid),
+    	}
+    	dataChan <- tup
+	}
+	close(dataChan)
+	fw.writeMetadata(TEST_FILE, dataChan)
+
+	if !fw.fileExists(TEST_FILE) {
+		t.Fatal("file", TEST_FILE, "does not exist")
+	}
+
+	body, err := ioutil.ReadFile(TEST_FILE)
+	if err != nil {
+		t.Fatal("could not read test file")
+	}
+	stringBody := string(body)
+	if stringBody != "[uuid: 0,uuid: 1,uuid: 2,uuid: 3]" {
+		t.Fatal("file contents does not match expected")
+	} 
+
+	testFWTeardown()
+}
+
 func TestFWWriteAndAppendMetadata(t *testing.T) {
 	testFWStartUp()
 
@@ -151,6 +198,65 @@ func TestFWWriteTimeseriesData(t *testing.T) {
 	fw := newTestFileWriter()
 
 	dataChan := make(chan *TimeseriesTuple, 5)
+
+	for i := 0; i < 4; i++ {
+		uuid := strconv.Itoa(i)
+		slot := &TimeSlot {
+				Uuid: uuid,
+				StartTime: int64(i),
+				EndTime: int64(i + 1),
+			}
+
+		tup := &TimeseriesTuple {
+        	slot: slot,
+        	data: []byte("uuid: " + uuid),
+    	}
+    	dataChan <- tup
+	}
+	close(dataChan)
+	fw.writeTimeseriesData(TEST_FILE, dataChan)
+
+	if !fw.fileExists(TEST_FILE) {
+		t.Fatal("file", TEST_FILE, "does not exist")
+	}
+
+	body, err := ioutil.ReadFile(TEST_FILE)
+	if err != nil {
+		t.Fatal("could not read test file")
+	}
+	stringBody := string(body)
+	if stringBody != "[uuid: 0,uuid: 1,uuid: 2,uuid: 3]" {
+		t.Fatal("file contents does not match expected")
+	} 
+
+	testFWTeardown()
+}
+
+func TestFWWriteNoDuplicatesTimeseriesData(t *testing.T) {
+	testFWStartUp()
+
+	fw := newTestFileWriter()
+
+	dataChan := make(chan *TimeseriesTuple, 5)
+
+	for i := 0; i < 4; i++ {
+		uuid := strconv.Itoa(i)
+		slot := &TimeSlot {
+				Uuid: uuid,
+				StartTime: int64(i),
+				EndTime: int64(i + 1),
+			}
+
+		tup := &TimeseriesTuple {
+        	slot: slot,
+        	data: []byte("uuid: " + uuid),
+    	}
+    	dataChan <- tup
+	}
+	close(dataChan)
+	fw.writeTimeseriesData(TEST_FILE, dataChan)
+
+	dataChan = make(chan *TimeseriesTuple, 5)
 
 	for i := 0; i < 4; i++ {
 		uuid := strconv.Itoa(i)

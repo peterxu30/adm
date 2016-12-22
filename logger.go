@@ -27,9 +27,11 @@ const (
 	UUID_TIMESERIES_BUCKET = "uuid_t_status"
 
 	/* Metadata bucket keys */
+	/* Status of writes to log */
 	UUIDS_FETCHED = "uuids_fetched"
-	UUIDS_WRITTEN = "uuids_written"
 	WINDOWS_FETCHED = "windows_fetched"
+	/* Status of actual writes */
+	UUIDS_WRITTEN = "uuids_written"
 	METADATA_WRITTEN = "metadata_written"
 	TIMESERIES_WRITTEN = "timeseries_written"
 )
