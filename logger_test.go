@@ -118,8 +118,8 @@ func TestLogInsertWindow(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			uuid: uuid,
-			readings: reading,
+			Uuid: uuid,
+			Readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -130,7 +130,7 @@ func TestLogInsertWindow(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		window := log.getWindowStatus(uuid)
-		if window.uuid != uuid || window.readings[0][0] != int64(i) {
+		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
 			t.Fatal("uuid", uuid + ":", "corresponding window do not match")
 		}
 	}
@@ -147,8 +147,8 @@ func TestLogGetWindowKeySet(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			uuid: uuid,
-			readings: reading,
+			Uuid: uuid,
+			Readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -186,8 +186,8 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			uuid: uuid,
-			readings: reading,
+			Uuid: uuid,
+			Readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -199,7 +199,7 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 	bindings := make(map[int]*Window, len(entrySet))
 
 	for _, entry := range entrySet {
-		val, err := strconv.Atoi(entry.uuid)
+		val, err := strconv.Atoi(entry.Uuid)
 		if err != nil {
 			t.Fatal("error in entry to int conversion")
 		}
@@ -208,7 +208,7 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		entry := bindings[i]
-		if entry.uuid != strconv.Itoa(i) || entry.readings[0][0] != int64(i) {
+		if entry.Uuid != strconv.Itoa(i) || entry.Readings[0][0] != int64(i) {
 			t.Fatal("entry contents are not correct")
 		}
 	}
@@ -562,8 +562,8 @@ func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			uuid: uuid,
-			readings: reading,
+			Uuid: uuid,
+			Readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
