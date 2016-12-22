@@ -11,11 +11,11 @@ const (
 	TEST_LOG = "test_log.db"
 )
 
-func testStartup() {
+func testLogStartup() {
 	os.Remove(TEST_LOG)
 }
 
-func testTeardown() {
+func testLogTeardown() {
 	os.Remove(TEST_LOG)
 }
 
@@ -24,7 +24,7 @@ func newTestLog() *Logger {
 }
 
 func TestLogInit(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	if log == nil {
@@ -41,11 +41,11 @@ func TestLogInit(t *testing.T) {
 		t.Fatal("WINDOWS_FETCHED should have status NOT_STARTED")
 	}
 
-	testTeardown() //better way than calling it at end of every test?
+	testLogTeardown() //better way than calling it at end of every test?
 }
 
 func TestLogUpdateMetadataUuidsFetchedKey(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	uuidStatus := log.getLogMetadata(UUIDS_FETCHED)
@@ -73,11 +73,11 @@ func TestLogUpdateMetadataUuidsFetchedKey(t *testing.T) {
 		t.Fatal("UUIDS_FETCHED should have status WRITE_COMPLETE")
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogUpdateMetadataWindowsFetchedKey(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	windowStatus := log.getLogMetadata(WINDOWS_FETCHED)
@@ -105,11 +105,11 @@ func TestLogUpdateMetadataWindowsFetchedKey(t *testing.T) {
 		t.Fatal("WINDOWS_FETCHED should have status WRITE_COMPLETE")
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogInsertWindow(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -118,8 +118,8 @@ func TestLogInsertWindow(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			Uuid: uuid,
-			Readings: reading,
+			uuid: uuid,
+			readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -130,16 +130,16 @@ func TestLogInsertWindow(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		window := log.getWindowStatus(uuid)
-		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
+		if window.uuid != uuid || window.readings[0][0] != int64(i) {
 			t.Fatal("uuid", uuid + ":", "corresponding window do not match")
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogGetWindowKeySet(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	for i := 0; i < 1000; i++ {
@@ -147,8 +147,8 @@ func TestLogGetWindowKeySet(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			Uuid: uuid,
-			Readings: reading,
+			uuid: uuid,
+			readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -174,11 +174,11 @@ func TestLogGetWindowKeySet(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogGetWindowEntrySet(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	for i := 0; i < 1000; i++ {
@@ -186,8 +186,8 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			Uuid: uuid,
-			Readings: reading,
+			uuid: uuid,
+			readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -199,7 +199,7 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 	bindings := make(map[int]*Window, len(entrySet))
 
 	for _, entry := range entrySet {
-		val, err := strconv.Atoi(entry.Uuid)
+		val, err := strconv.Atoi(entry.uuid)
 		if err != nil {
 			t.Fatal("error in entry to int conversion")
 		}
@@ -208,16 +208,16 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		entry := bindings[i]
-		if entry.Uuid != strconv.Itoa(i) || entry.Readings[0][0] != int64(i) {
+		if entry.uuid != strconv.Itoa(i) || entry.readings[0][0] != int64(i) {
 			t.Fatal("entry contents are not correct")
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogInsertSimpleUuidMetadata(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -269,11 +269,11 @@ func TestLogInsertSimpleUuidMetadata(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogInsertStripedUuidMetadata(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -311,11 +311,11 @@ func TestLogInsertStripedUuidMetadata(t *testing.T) {
 		
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogUpdateUuidMetadata(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -364,11 +364,11 @@ func TestLogUpdateUuidMetadata(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogGetUuidMetadataKeySet(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 	for i := 0; i < 1000; i++ {
@@ -397,11 +397,11 @@ func TestLogGetUuidMetadataKeySet(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogInsertSimpleUuidTimeseriesData(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -492,11 +492,11 @@ func TestLogInsertSimpleUuidTimeseriesData(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogInsertStripedUuidTimeseriesData(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -549,11 +549,11 @@ func TestLogInsertStripedUuidTimeseriesData(t *testing.T) {
 		}
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -562,8 +562,8 @@ func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 		reading := make([][]int64, 1)
 		reading[0] = []int64{int64(i)}
 		window := &Window {
-			Uuid: uuid,
-			Readings: reading,
+			uuid: uuid,
+			readings: reading,
 		}
 		err := log.updateWindowStatus(uuid, window)
 		if err != nil {
@@ -576,11 +576,11 @@ func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 		t.Fatal("uuid", uuid + ":", "should not exist but it does")
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogRetrieveNonexistentUuidMetadataKey(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -598,11 +598,11 @@ func TestLogRetrieveNonexistentUuidMetadataKey(t *testing.T) {
 		t.Fatal("uuid", uuid + ":", "should not exist but it does")	
 	}
 
-	testTeardown()
+	testLogTeardown()
 }
 
 func TestLogRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
-	testStartup()
+	testLogStartup()
 
 	log := newTestLog()
 
@@ -654,5 +654,5 @@ func TestLogRetrieveNonexistentUuidTimeseriesKey(t *testing.T) {
 		t.Fatal("uuid", badSlot.Uuid + ":", "should not exist but it does")
 	}
 
-	testTeardown()
+	testLogTeardown()
 }

@@ -54,9 +54,9 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
         if r.log.getUuidTimeseriesStatus(slot) == WRITE_COMPLETE {
             continue
         }
-        startTime := strconv.FormatInt(slot.startTime, 10)
-        endTime := strconv.FormatInt(slot.endTime, 10)
-        query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.uuid + "'"
+        startTime := strconv.FormatInt(slot.StartTime, 10)
+        endTime := strconv.FormatInt(slot.EndTime, 10)
+        query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"
         body := r.makeQuery(src, query)
         dataChan <- r.makeTimeseriesTuple(slot, body)
     }
@@ -86,7 +86,7 @@ func (r *NetworkReader) makeQuery(url string, queryString string) []byte {
     defer resp.Body.Close()
     body, err := ioutil.ReadAll(resp.Body)
     if err != nil {
-        fmt.Println("failed to read response body")
+        fmt.Println("failed to read response bodyf")
         panic(err)
     }
     return body

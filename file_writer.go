@@ -61,12 +61,12 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 		if w.log.getUuidMetadataStatus(tuple.uuid) == WRITE_COMPLETE {
 			continue
 		}
-
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
 				panic(err)
 			}
+		} else {
 			first = false
 		}
 
@@ -116,6 +116,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 			if err != nil {
 				panic(err)
 			}
+		} else {
 			first = false
 		}
 

@@ -17,7 +17,6 @@ type TimeseriesTuple struct {
 	data []byte
 }
 
-
 type Reader interface {
     readUuids(src string) []string //relatively small size. can be accomplished without use of channels.
     readMetadata(src string, uuids []string, dataChan chan *MetadataTuple)

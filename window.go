@@ -6,10 +6,10 @@ type Window struct {
 }
 
 type TimeSlot struct {
-    uuid string
-    startTime int64
-    endTime int64
-    count int
+    Uuid string
+    StartTime int64
+    EndTime int64
+    Count int
 }
 
 func (window *Window) getTimeSlots() []*TimeSlot {
@@ -24,10 +24,10 @@ func (window *Window) getTimeSlots() []*TimeSlot {
         }
 
         var slot TimeSlot = TimeSlot {
-            uuid: window.uuid,
-            startTime: startTime,
-            endTime: endTime,
-            count: int(reading[1]),
+            Uuid: window.uuid,
+            StartTime: startTime,
+            EndTime: endTime,
+            Count: int(reading[1]),
         }
         slots[i] = &slot
     }
