@@ -6,12 +6,6 @@ import (
 	"os"
 )
 
-const (
-    UuidDestination = "uuids.txt"
-    MetadataDestination = "metadata.txt"
-    FileSize = 10000000 //amount of records in each timeseries file
-)
-
 type FileWriter struct {
 	log *Logger
 }

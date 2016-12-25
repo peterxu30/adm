@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/gob"
+	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
 )
@@ -152,10 +153,9 @@ func (logger *Logger) getWindowEntrySet() []*Window {
 func (logger *Logger) updateWindowStatus(uuid string, window *Window) error {
 	var buf []byte
 	if window == nil {
-		buf = nil
-	} else {
-		buf = convertToByteArray(*window)
+		return errors.New("window " + uuid + ": cannot be nil")
 	}
+	buf = convertToByteArray(*window)
 	return logger.put(WINDOW_BUCKET, []byte(uuid), buf)
 }
 

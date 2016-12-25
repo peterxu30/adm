@@ -2,7 +2,7 @@ package main
 
 type Window struct {
     Uuid string `json:"uuid"`
-    Readings [][]int64
+    Readings [][]float64
 }
 
 type TimeSlot struct {
@@ -17,10 +17,10 @@ func (window *Window) getTimeSlots() []*TimeSlot {
     length := len(window.Readings)
     for i := 0; i < length; i++ {
         reading := window.Readings[i]
-        startTime := reading[0]
+        startTime := int64(reading[0])
         endTime := int64(-1) //means end time is now
         if i < length - 1 {
-            endTime = window.Readings[i + 1][0]
+            endTime = int64(window.Readings[i + 1][0])
         }
 
         var slot TimeSlot = TimeSlot {

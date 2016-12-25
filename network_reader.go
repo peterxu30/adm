@@ -30,7 +30,6 @@ func (r *NetworkReader) readUuids(src string) []string {
     json.Unmarshal(body, &uuids)
 
     for _, uuid := range uuids {
-        r.log.updateWindowStatus(uuid, nil)
         r.log.updateUuidMetadataStatus(uuid, NOT_STARTED)
     }
 
@@ -48,23 +47,21 @@ func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
 func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window {
     windows := make([]*Window, len(uuids))
     query := "select window(365d) data in (0, now) where uuid ="
-    first := true
+
     var readBefore []*Window
+    var uuidsToBatch []string
     for _, uuid := range uuids {
         w := r.log.getWindowStatus(uuid)
         if w != nil {
             readBefore = append(readBefore, w)
             continue
-        }
-        if !first {
-            query += " or uuid = "
         } else {
-            first = false
+            uuidsToBatch = append(uuidsToBatch, uuid)
         }
-        query += "'" + uuid + "'"
     }
+
+    query = r.composeBatchQuery(query, uuidsToBatch)
     body := r.makeQuery(src, query)
-    fmt.Println(query)
     err := json.Unmarshal(body, &windows)
     if err != nil {
         fmt.Println("batch window read failed")
@@ -85,7 +82,6 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
 
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
     body := r.makeQuery(src, query)
-    ioutil.WriteFile("testy.txt", body, 0644) //TODO: REMOVE
     var windows [1]Window
     err := json.Unmarshal(body, &windows)
     if err != nil {
@@ -96,6 +92,7 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
     return &window
 }
 
+//if want to batch queries, modify MetadataTuple to have an array of uuids instead of just one for logging.
 func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) {
     if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
         return
@@ -160,6 +157,19 @@ func (r *NetworkReader) makeQuery(url string, queryString string) []byte {
         panic(err)
     }
     return body
+}
+
+func (r *NetworkReader) composeBatchQuery(query string, uuids []string) string {
+    first := true
+    for _, uuid := range uuids {
+        if !first {
+            query += " or uuid = "
+        } else {
+            first = false
+        }
+        query += "'" + uuid + "'"
+    }
+    return query
 }
 
 func (r *NetworkReader) makeMetadataTuple(uuid string, data []byte) *MetadataTuple {

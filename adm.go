@@ -1,15 +1,21 @@
+//TODO: At the moment, the log is checked at every level to see if a job was done or not. After adm methods are better flushed out, go back and consider where logging is most effective.
+
 package main
 
 import (
     "fmt"
     "log"
     "runtime"
+    "sync"
     "time"
 )
 
 const (
     Url = "http://128.32.37.201:8079/api/query"
     YearNS = 31536000000000000
+    UuidDestination = "uuids.txt"
+    MetadataDestination = "metadata1.txt"
+    FileSize = 10000000 //amount of records in each timeseries file
 )
 
 type ADMManager struct {
@@ -36,23 +42,77 @@ func newADMManager(url string, workerSize int, openIO int) *ADMManager {
     }
 }
 
-func (adm *ADMManager) readAllUuids() {
+func (adm *ADMManager) processUuids() {
+    if (adm.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
+        return
+    }
     adm.uuids = adm.reader.readUuids(adm.url)
+
+    adm.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
+}
+
+func (adm *ADMManager) processMetadata() {
+    if adm.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
+        fmt.Println("Writing metadata complete")
+        return
+    }
+
+    dataChan := make(chan *MetadataTuple)
+    var wg sync.WaitGroup
+    wg.Add(2)
+
+    adm.workers.acquire()
+    go func() {
+        fmt.Println("Starting to read metadata")
+        defer adm.workers.release()
+        defer wg.Done()
+        adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
+
+    }()
+
+    adm.workers.acquire()
+    adm.openIO.acquire()
+    go func() {
+        fmt.Println("Starting to write metadata")
+        defer wg.Done()
+        defer adm.workers.release()
+        defer adm.openIO.release()
+        adm.writer.writeMetadata(MetadataDestination, dataChan)
+    }()
+
+    wg.Wait()
+    fmt.Println("DONE")
+    // adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
+}
+
+func (adm *ADMManager) run() {
+    var wg sync.WaitGroup
+    wg.Add(1)
+
+    adm.processUuids()
+    go func() {
+        defer wg.Done()
+        adm.processMetadata()
+    }()
+    wg.Wait()
 }
 
 func main() {
     go func() {
         for {
-            time.Sleep(1 * time.Second)
+            time.Sleep(2 * time.Second)
             log.Println(runtime.NumGoroutine())
         }
     }()
     adm := newADMManager(Url, 10, 10)
-    adm.readAllUuids()
+    adm.run()
 
     //testing
     // ids := []string{"11d93edc-9a0e-5896-8cbe-4888ba52dcbd", "12a4db87-67e1-5fc7-99fa-33b01e32c0b4"}
-    fmt.Println(adm.reader.readWindow(adm.url, "11d93edc-9a0e-5896-8cbe-4888ba52dcbd"))
-    // fmt.Println(adm.reader.readWindowsBatched(adm.url, ids))
+    // fmt.Println(adm.reader.readWindow(adm.url, "11d93edc-9a0e-5896-8cbe-4888ba52dcbd"))
+    // r := newNetworkReader(adm.log)
+    // var w []*Window
+    // w = r.readWindowsBatched(adm.url, ids)
+    // fmt.Println(w[0], "\n", w[1])
     // fmt.Println(adm.uuids)
 }
