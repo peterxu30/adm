@@ -6,6 +6,7 @@ import (
 	"os"
 )
 
+
 type FileWriter struct {
 	log *Logger
 }

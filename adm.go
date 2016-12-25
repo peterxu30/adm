@@ -43,11 +43,7 @@ func newADMManager(url string, workerSize int, openIO int) *ADMManager {
 }
 
 func (adm *ADMManager) processUuids() {
-    if (adm.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
-        return
-    }
     adm.uuids = adm.reader.readUuids(adm.url)
-
     adm.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
 }
 
@@ -61,28 +57,28 @@ func (adm *ADMManager) processMetadata() {
     var wg sync.WaitGroup
     wg.Add(2)
 
+    fmt.Println(adm.uuids)
+
     adm.workers.acquire()
     go func() {
-        fmt.Println("Starting to read metadata")
-        defer adm.workers.release()
         defer wg.Done()
+        defer adm.workers.release()
+        fmt.Println("Starting to read metadata")
         adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
-
     }()
 
     adm.workers.acquire()
     adm.openIO.acquire()
     go func() {
-        fmt.Println("Starting to write metadata")
         defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
+        fmt.Println("Starting to write metadata")
         adm.writer.writeMetadata(MetadataDestination, dataChan)
     }()
-
+    fmt.Println(adm.workers.count(), adm.openIO.count())
     wg.Wait()
-    fmt.Println("DONE")
-    // adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
+    adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
 }
 
 func (adm *ADMManager) run() {

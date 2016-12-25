@@ -100,7 +100,7 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
 
     for _, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
-            continue
+            // continue
         }
 
         query := "select * where uuid='" + uuid + "'"
