@@ -6,6 +6,7 @@ import (
     "fmt"
     "log"
     "runtime"
+    "strconv"
     "sync"
     "time"
 )
@@ -57,12 +58,12 @@ func (adm *ADMManager) processMetadata() {
     var wg sync.WaitGroup
     wg.Add(2)
 
-    fmt.Println(adm.uuids)
-
     adm.workers.acquire()
+    adm.openIO.acquire()
     go func() {
-        defer wg.Done()
         defer adm.workers.release()
+        defer adm.openIO.release()
+        defer wg.Done()
         fmt.Println("Starting to read metadata")
         adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
     }()
@@ -70,26 +71,98 @@ func (adm *ADMManager) processMetadata() {
     adm.workers.acquire()
     adm.openIO.acquire()
     go func() {
-        defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
+        defer wg.Done()
         fmt.Println("Starting to write metadata")
         adm.writer.writeMetadata(MetadataDestination, dataChan)
     }()
-    fmt.Println(adm.workers.count(), adm.openIO.count())
+
     wg.Wait()
     adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
 }
 
+func (adm *ADMManager) processTimeseriesData() {
+    fmt.Println("About to start processing timeseries data")
+
+    windows := adm.reader.readWindows(adm.url, adm.uuids)
+
+    var wg sync.WaitGroup
+    fileCount := 0
+    currentSize := 0
+    slotsToWrite := make([]*TimeSlot, 0)
+    for _, window := range windows { //each window represents one uuid
+
+        var timeSlots []*TimeSlot
+        timeSlots = window.getTimeSlots()
+        if (len(timeSlots) == 0) {
+            continue;
+        }
+
+        for _, timeSlot := range timeSlots {
+            if adm.log.getUuidTimeseriesStatus(timeSlot) == WRITE_COMPLETE {
+                continue
+            } else if timeSlot.Count == 0 {
+                adm.log.updateUuidTimeseriesStatus(timeSlot, WRITE_COMPLETE)
+                continue
+            }
+
+            currentSize += timeSlot.Count
+
+            if currentSize >= FileSize { //convert to memory size check later
+                fileName := "ts" + strconv.Itoa(fileCount)
+                wg.Add(2)
+                dataChan := make(chan *TimeseriesTuple)
+
+                adm.workers.acquire()
+                adm.openIO.acquire()
+                go func(slotsToWrite []*TimeSlot) {
+                    defer adm.workers.release()
+                    defer adm.openIO.release()
+                    defer wg.Done()
+                    adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
+                }(slotsToWrite)
+
+                adm.workers.acquire()
+                adm.openIO.acquire()
+                go func(fileName string) {
+                    defer adm.workers.release()
+                    defer adm.openIO.release()
+                    defer wg.Done()
+                    adm.writer.writeTimeseriesData(fileName, dataChan)
+                }(fileName)
+
+                currentSize = timeSlot.Count
+                fileCount++
+                slotsToWrite = make([]*TimeSlot, 0)
+            }
+            slotsToWrite = append(slotsToWrite, timeSlot)
+        }
+    }
+
+    wg.Wait()
+}
+
 func (adm *ADMManager) run() {
     var wg sync.WaitGroup
-    wg.Add(1)
+    wg.Add(2)
 
     adm.processUuids()
+
+    adm.workers.acquire()
     go func() {
+        defer adm.workers.release()
         defer wg.Done()
         adm.processMetadata()
     }()
+
+    adm.workers.acquire()
+    go func() {
+        defer adm.workers.release()
+        defer wg.Done()
+        adm.processTimeseriesData()
+    }()
+    fmt.Println("Waiting")
     wg.Wait()
 }
 
@@ -100,7 +173,7 @@ func main() {
             log.Println(runtime.NumGoroutine())
         }
     }()
-    adm := newADMManager(Url, 10, 10)
+    adm := newADMManager(Url, 50, 15)
     adm.run()
 
     //testing

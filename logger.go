@@ -8,7 +8,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-type LogStatus uint8
+type LogStatus uint16
 
 /* Enums for possible log statuses */
 const (
@@ -35,6 +35,7 @@ const (
 	UUIDS_WRITTEN = "uuids_written"
 	METADATA_WRITTEN = "metadata_written"
 	TIMESERIES_WRITTEN = "timeseries_written"
+	NUM_FILES_WRITTEN = "files_written"
 )
 
 type Logger struct {
@@ -110,6 +111,10 @@ func newLoggerWithName(name string) *Logger {
 		logger.updateLogMetadata(TIMESERIES_WRITTEN, NOT_STARTED)
 	}
 
+	if logger.getLogMetadata(NUM_FILES_WRITTEN) == NIL {
+		logger.updateLogMetadata(NUM_FILES_WRITTEN, 0)
+	}
+
 	return &logger
 }
 
@@ -123,6 +128,17 @@ func (logger *Logger) getLogMetadata(key string) LogStatus {
 func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
 	buf := convertToByteArray(status)
 	return logger.put(METADATA_BUCKET, []byte(key), buf)
+}
+
+func (logger *Logger) checkAndUpdateLogMetadata(key string, predicate func(current LogStatus) bool, newStatus LogStatus) error {
+	buf := convertToByteArray(newStatus)
+
+	pred := func(x []byte) bool {
+		status := convertFromBinaryToLogStatus(x)
+		return predicate(status)
+	}
+
+	return logger.checkAndUpdate(METADATA_BUCKET, []byte(key), pred, buf)
 }
 
 /* Window Data Functions */
@@ -208,6 +224,18 @@ func (logger *Logger) put(bucket string, key []byte, value []byte) error {
 	return logger.log.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucket))
 		err := b.Put(key, value)
+		return err
+	})
+}
+
+func (logger *Logger) checkAndUpdate(bucket string, key []byte, predicate func(x []byte) bool, value []byte) error {
+	return logger.log.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucket))
+		value := b.Get(key)
+		var err error = nil
+		if predicate(value) {
+			err = b.Put(key, value)
+		}
 		return err
 	})
 }

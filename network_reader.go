@@ -50,6 +50,7 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window
 
     var readBefore []*Window
     var uuidsToBatch []string
+    toBatchCount := 0
     for _, uuid := range uuids {
         w := r.log.getWindowStatus(uuid)
         if w != nil {
@@ -57,14 +58,21 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window
             continue
         } else {
             uuidsToBatch = append(uuidsToBatch, uuid)
+            toBatchCount++
         }
     }
 
-    query = r.composeBatchQuery(query, uuidsToBatch)
-    body := r.makeQuery(src, query)
-    err := json.Unmarshal(body, &windows)
-    if err != nil {
-        fmt.Println("batch window read failed")
+    if toBatchCount > 0 {
+        query = r.composeBatchQuery(query, uuidsToBatch)
+        body := r.makeQuery(src, query)
+        err := json.Unmarshal(body, &windows)
+        if err != nil {
+            fmt.Println("batch window read failed")
+        }
+
+        for _, window := range windows {
+            r.log.updateWindowStatus(window.Uuid, window)
+        }
     }
 
     for _, window := range readBefore {
@@ -82,14 +90,17 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
 
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
     body := r.makeQuery(src, query)
-    var windows [1]Window
+    var windows [1]*Window
     err := json.Unmarshal(body, &windows)
     if err != nil {
         fmt.Println("window", uuid + ":", "could not be read")
         panic(err)
     }
     window := windows[0]
-    return &window
+
+    r.log.updateWindowStatus(uuid, window)
+
+    return window
 }
 
 //if want to batch queries, modify MetadataTuple to have an array of uuids instead of just one for logging.

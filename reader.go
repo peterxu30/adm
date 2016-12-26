@@ -20,7 +20,7 @@ type TimeseriesTuple struct {
 
 type Reader interface {
     readUuids(src string) []string //relatively small size. can be accomplished without use of channels.
-    readWindow(src string, uuid string) *Window
+    readWindows(src string, uuids []string) []*Window
     readMetadata(src string, uuids []string, dataChan chan *MetadataTuple)
     readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple)
 }
