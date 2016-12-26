@@ -40,7 +40,6 @@ func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
     windows := make([]*Window, len(uuids))
     for i, uuid := range uuids {
         windows[i] = r.readWindow(src, uuid)
-        fmt.Println(uuid, "window read")
     }
     return windows
 }
@@ -91,16 +90,17 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
 
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
     body := r.makeQuery(src, query)
+
     var windows [1]*Window
     err := json.Unmarshal(body, &windows)
     if err != nil {
         fmt.Println("window", uuid + ":", "could not be read")
-        panic(err)
+        // panic(err)
+        return nil
     }
     window := windows[0]
-
     r.log.updateWindowStatus(uuid, window)
-
+    fmt.Println(uuid, window)
     return window
 }
 

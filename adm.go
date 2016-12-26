@@ -18,6 +18,8 @@ const (
     UuidDestination = "uuids.txt"
     MetadataDestination = "metadata1.txt"
     FileSize = 10000000 //amount of records in each timeseries file
+    WorkerSize = 40
+    OpenIO = 15
 )
 
 type ADMManager struct {
@@ -95,10 +97,14 @@ func (adm *ADMManager) processTimeseriesData() {
     fmt.Println("got windows")
     for _, window := range windows { //each window represents one uuid
 
+        if window == nil {
+            continue
+        }
+
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         if (len(timeSlots) == 0) {
-            continue;
+            continue
         }
 
         for _, timeSlot := range timeSlots {
@@ -169,13 +175,14 @@ func (adm *ADMManager) run() {
 }
 
 func main() {
+    adm := newADMManager(Url, WorkerSize, OpenIO)
     go func() {
         for {
             time.Sleep(2 * time.Second)
-            log.Println(runtime.NumGoroutine())
+            log.Println("Number of go routines:", runtime.NumGoroutine())
+            log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
         }
     }()
-    adm := newADMManager(Url, 50, 15)
     adm.run()
 
     //testing
