@@ -1,5 +1,9 @@
 package main
 
+import (
+	"fmt"
+)
+
 type Window struct {
     Uuid string `json:"uuid"`
     Readings [][]float64
@@ -13,6 +17,7 @@ type TimeSlot struct {
 }
 
 func (window *Window) getTimeSlots() []*TimeSlot {
+	fmt.Println(window)
     var slots = make([]*TimeSlot, len(window.Readings))
     length := len(window.Readings)
     for i := 0; i < length; i++ {

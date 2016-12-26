@@ -40,6 +40,7 @@ func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
     windows := make([]*Window, len(uuids))
     for i, uuid := range uuids {
         windows[i] = r.readWindow(src, uuid)
+        fmt.Println(uuid, "window read")
     }
     return windows
 }

@@ -1,5 +1,6 @@
 //TODO: At the moment, the log is checked at every level to see if a job was done or not. After adm methods are better flushed out, go back and consider where logging is most effective.
-
+//Thought: Right now, uuids and window queries are written to the log for on disk retrieval in event of crash. Writing to log slows down program in exchange for betetr crash recovery performance.
+//However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
 package main
 
 import (
@@ -91,6 +92,7 @@ func (adm *ADMManager) processTimeseriesData() {
     fileCount := 0
     currentSize := 0
     slotsToWrite := make([]*TimeSlot, 0)
+    fmt.Println("got windows")
     for _, window := range windows { //each window represents one uuid
 
         var timeSlots []*TimeSlot
@@ -129,7 +131,7 @@ func (adm *ADMManager) processTimeseriesData() {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
-                    adm.writer.writeTimeseriesData(fileName, dataChan)
+                    adm.writer.writeTimeseriesData(fileName, dataChan) //TODO: dest is not always a file name. Depends on the writer type. Write a function that returns dest based on writer type.
                 }(fileName)
 
                 currentSize = timeSlot.Count
