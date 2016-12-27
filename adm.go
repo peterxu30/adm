@@ -1,6 +1,8 @@
 //TODO: At the moment, the log is checked at every level to see if a job was done or not. After adm methods are better flushed out, go back and consider where logging is most effective.
 //Thought: Right now, uuids and window queries are written to the log for on disk retrieval in event of crash. Writing to log slows down program in exchange for betetr crash recovery performance.
 //However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
+//Make a function that encloses all the parallelization logic. Acquiring/releasing resources etc.
+
 package main
 
 import (
@@ -86,6 +88,11 @@ func (adm *ADMManager) processMetadata() {
 }
 
 func (adm *ADMManager) processTimeseriesData() {
+    if adm.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
+        fmt.Println("Writing timeseries complete")
+        return
+    }
+
     fmt.Println("About to start processing timeseries data")
 
     windows := adm.reader.readWindows(adm.url, adm.uuids)
@@ -149,29 +156,56 @@ func (adm *ADMManager) processTimeseriesData() {
     }
 
     wg.Wait()
+    adm.log.updateLogMetadata(TIMESERIES_WRITTEN, WRITE_COMPLETE)
 }
 
 func (adm *ADMManager) run() {
-    var wg sync.WaitGroup
-    wg.Add(2)
-
     adm.processUuids()
 
-    adm.workers.acquire()
-    go func() {
-        defer adm.workers.release()
-        defer wg.Done()
-        adm.processMetadata()
-    }()
+    finished := false
+    for !finished {
 
-    adm.workers.acquire()
-    go func() {
-        defer adm.workers.release()
-        defer wg.Done()
-        adm.processTimeseriesData()
-    }()
-    fmt.Println("Waiting")
-    wg.Wait()
+        var wg sync.WaitGroup
+        wg.Add(2)
+
+        adm.workers.acquire()
+        go func() {
+            defer adm.workers.release()
+            defer wg.Done()
+            adm.processMetadata()
+        }()
+
+        adm.workers.acquire()
+        go func() {
+            defer adm.workers.release()
+            defer wg.Done()
+            adm.processTimeseriesData()
+        }()
+        fmt.Println("Waiting")
+        wg.Wait()
+
+        finished = adm.checkIfMetadataProcessed() && adm.checkIfTimeseriesProcessed()
+    }
+}
+
+func (adm *ADMManager) checkIfMetadataProcessed() bool {
+    keySet := adm.log.getUuidMetadataKeySet()
+    for _, key := range keySet {
+        if adm.log.getUuidMetadataStatus(key) != WRITE_COMPLETE {
+            return false
+        }
+    }
+    return true
+}
+
+func (adm *ADMManager) checkIfTimeseriesProcessed() bool {
+    keySet := adm.log.getUuidTimeseriesKeySet()
+    for _, key := range keySet {
+        if adm.log.getUuidTimeseriesStatus(key) != WRITE_COMPLETE {
+            return false
+        }
+    }
+    return true
 }
 
 func main() {

@@ -115,8 +115,8 @@ func TestLogInsertWindow(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
-		reading := make([][]int64, 1)
-		reading[0] = []int64{int64(i)}
+		reading := make([][]float64, 1)
+		reading[0] = []float64{float64(i)}
 		window := &Window {
 			Uuid: uuid,
 			Readings: reading,
@@ -130,7 +130,7 @@ func TestLogInsertWindow(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
 		window := log.getWindowStatus(uuid)
-		if window.Uuid != uuid || window.Readings[0][0] != int64(i) {
+		if window.Uuid != uuid || window.Readings[0][0] != float64(i) {
 			t.Fatal("uuid", uuid + ":", "corresponding window do not match")
 		}
 	}
@@ -144,8 +144,8 @@ func TestLogGetWindowKeySet(t *testing.T) {
 	log := newTestLog()
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
-		reading := make([][]int64, 1)
-		reading[0] = []int64{int64(i)}
+		reading := make([][]float64, 1)
+		reading[0] = []float64{float64(i)}
 		window := &Window {
 			Uuid: uuid,
 			Readings: reading,
@@ -183,8 +183,8 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 	log := newTestLog()
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
-		reading := make([][]int64, 1)
-		reading[0] = []int64{int64(i)}
+		reading := make([][]float64, 1)
+		reading[0] = []float64{float64(i)}
 		window := &Window {
 			Uuid: uuid,
 			Readings: reading,
@@ -208,7 +208,7 @@ func TestLogGetWindowEntrySet(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		entry := bindings[i]
-		if entry.Uuid != strconv.Itoa(i) || entry.Readings[0][0] != int64(i) {
+		if entry.Uuid != strconv.Itoa(i) || entry.Readings[0][0] != float64(i) {
 			t.Fatal("entry contents are not correct")
 		}
 	}
@@ -552,6 +552,41 @@ func TestLogInsertStripedUuidTimeseriesData(t *testing.T) {
 	testLogTeardown()
 }
 
+func TestLogUuidTimeseriesKeySet(t *testing.T) {
+	testLogStartup()
+
+	log := newTestLog()
+
+	for i := 0; i < 30; i++ {
+		uuid := strconv.Itoa(i)
+		slot := &TimeSlot {
+			Uuid: uuid,
+			StartTime: int64(0),
+			EndTime: int64(1),
+		}
+		err := log.updateUuidTimeseriesStatus(slot, NOT_STARTED)
+		if err != nil {
+			t.Fatal("uuid", uuid + ":", "inserting timeseries data failed")
+		}
+	}
+
+	keySet := log.getUuidTimeseriesKeySet()
+
+	for i, key := range keySet {
+		uuid := strconv.Itoa(i)
+		slot := &TimeSlot {
+			Uuid: uuid,
+			StartTime: int64(0),
+			EndTime: int64(1),
+		}
+		if *key != *slot {
+			t.Fatal("uuid", uuid + ":", "timeseries keyset key did not match expected")
+		}
+	}
+
+	testLogTeardown()
+}
+
 func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 	testLogStartup()
 
@@ -559,8 +594,8 @@ func TestLogRetrieveNonexistentWindowKey(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		uuid := strconv.Itoa(i)
-		reading := make([][]int64, 1)
-		reading[0] = []int64{int64(i)}
+		reading := make([][]float64, 1)
+		reading[0] = []float64{float64(i)}
 		window := &Window {
 			Uuid: uuid,
 			Readings: reading,

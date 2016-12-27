@@ -203,6 +203,15 @@ func (logger *Logger) getUuidTimeseriesStatus(timeSlot *TimeSlot) LogStatus {
 	return convertFromBinaryToLogStatus(body)
 }
 
+func (logger *Logger) getUuidTimeseriesKeySet() []*TimeSlot {
+	byteKeys := logger.keySet(UUID_TIMESERIES_BUCKET)
+	keys := make([]*TimeSlot, len(byteKeys))
+	for i, byteKey := range byteKeys {
+		keys[i] = convertFromBinaryToTimeSlot(byteKey)
+	}
+	return keys
+}
+
 func (logger *Logger) updateUuidTimeseriesStatus(timeSlot *TimeSlot, status LogStatus) error {
 	buf := convertToByteArray(status)
 	return logger.put(UUID_TIMESERIES_BUCKET, convertToByteArray(*timeSlot), buf)
@@ -306,6 +315,21 @@ func convertFromBinaryToWindow(data []byte) *Window {
 		fmt.Println("convertFromBinaryToWindow err:", err)
 	}
 	return &window
+}
+
+func convertFromBinaryToTimeSlot(data []byte) *TimeSlot {
+	if data == nil {
+		return nil
+	}
+
+	var timeSlot TimeSlot
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+	err := dec.Decode(&timeSlot)
+	if err != nil {
+		fmt.Println("convertFromBinaryToInterface err:", err)
+	}
+	return &timeSlot
 }
 
 /* Converts byte array into LogStatus */
