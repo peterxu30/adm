@@ -62,7 +62,7 @@ func TestFWWriteMetadata(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		uuid := strconv.Itoa(i)
 		tup := &MetadataTuple {
-        	uuid: uuid,
+        	uuids: []string{uuid},
         	data: []byte("uuid: " + uuid),
     	}
     	dataChan <- tup
@@ -96,7 +96,7 @@ func TestFWWriteNoDuplicatesMetadata(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		uuid := strconv.Itoa(i)
 		tup := &MetadataTuple {
-        	uuid: uuid,
+        	uuids: []string{uuid},
         	data: []byte("uuid: " + uuid),
     	}
     	dataChan <- tup
@@ -109,7 +109,7 @@ func TestFWWriteNoDuplicatesMetadata(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		uuid := strconv.Itoa(i)
 		tup := &MetadataTuple {
-        	uuid: uuid,
+        	uuids: []string{uuid},
         	data: []byte("uuid: " + uuid),
     	}
     	dataChan <- tup
@@ -155,7 +155,7 @@ func TestFWWriteAndAppendMetadata(t *testing.T) {
 		for i := 0; i < 3; i++ {
 			uuid := strconv.Itoa(i)
 			tup := &MetadataTuple {
-	        	uuid: uuid,
+	        	uuids: []string{uuid},
 	        	data: []byte("uuid: " + uuid),
 	    	}
 	    	dataChan <- tup
@@ -167,7 +167,7 @@ func TestFWWriteAndAppendMetadata(t *testing.T) {
 	for i := 3; i < 6; i++ {
 		uuid := strconv.Itoa(i)
 		tup := &MetadataTuple {
-        	uuid: uuid,
+        	uuids: []string{uuid},
         	data: []byte("uuid: " + uuid),
     	}
     	dataChan <- tup

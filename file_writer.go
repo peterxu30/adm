@@ -54,9 +54,14 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 	first := true
 	wrote := false
 	for tuple := range dataChan {
-		if w.log.getUuidMetadataStatus(tuple.uuid) == WRITE_COMPLETE {
-			continue
+		for _, uuid := range tuple.uuids {
+			if w.log.getUuidMetadataStatus(uuid) != WRITE_COMPLETE {
+				break
+			} else {
+				continue
+			}
 		}
+
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
@@ -71,7 +76,10 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 			panic(err)
 		}
 		wrote = true
-		w.log.updateUuidMetadataStatus(tuple.uuid, WRITE_COMPLETE)
+
+		for _, uuid := range tuple.uuids {
+			w.log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
+		}
 	}
 
 	if wrote {
@@ -144,7 +152,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	pred := func(current LogStatus) bool {
 		return current < fileNumber
 	}
-	w.log.checkAndUpdateLogMetadata(NUM_FILES_WRITTEN, pred,fileNumber)
+	w.log.checkAndUpdateLogMetadata(NUM_FILES_WRITTEN, pred, fileNumber)
 }
 
 /*

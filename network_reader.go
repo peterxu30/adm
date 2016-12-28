@@ -9,6 +9,10 @@ import (
     "strconv"
 )
 
+const (
+    BatchSize = 10
+)
+
 type NetworkReader struct {
     log *Logger
 }
@@ -100,7 +104,7 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
     }
     window := windows[0]
     r.log.updateWindowStatus(uuid, window)
-    fmt.Println(uuid, window)
+    // fmt.Println(uuid, window)
     return window
 }
 
@@ -110,16 +114,54 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
         return
     }
 
-    for _, uuid := range uuids {
+    uuidsToBatch := make([]string, BatchSize)
+    length := len(uuids)
+    count := 0
+    for i, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
         }
 
-        query := "select * where uuid='" + uuid + "'"
-        body := r.makeQuery(src, query)
-        dataChan <- r.makeMetadataTuple(uuid, body)
+        uuidsToBatch = append(uuidsToBatch, uuid)
+        count++
+
+        if count == 10 || i == (length - 1) {
+            r.readMetadataBatched(src, uuidsToBatch, dataChan)
+            uuidsToBatch = make([]string, BatchSize)
+            count = 0
+        }
+
+        // query := "select * where uuid='" + uuid + "'"
+        // body := r.makeQuery(src, query)
+        // dataChan <- r.makeMetadataTuple([]string{uuid}, body)
     }
     close(dataChan)
+}
+
+//helper function
+func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan chan *MetadataTuple) {
+    if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
+        return
+    }
+    query := "select * where uuid ="
+
+    var uuidsToBatch []string
+    toBatchCount := 0
+    for _, uuid := range uuids {
+        w := r.log.getUuidMetadataStatus(uuid)
+        if w == WRITE_COMPLETE {
+            continue
+        } else {
+            uuidsToBatch = append(uuidsToBatch, uuid)
+            toBatchCount++
+        }
+    }
+
+    if toBatchCount > 0 {
+        query = r.composeBatchQuery(query, uuidsToBatch)
+        body := r.makeQuery(src, query)
+        dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
+    }
 }
 
 //TODO: Batch the queries
@@ -184,9 +226,9 @@ func (r *NetworkReader) composeBatchQuery(query string, uuids []string) string {
     return query
 }
 
-func (r *NetworkReader) makeMetadataTuple(uuid string, data []byte) *MetadataTuple {
+func (r *NetworkReader) makeMetadataTuple(uuids []string, data []byte) *MetadataTuple {
     return &MetadataTuple {
-        uuid: uuid,
+        uuids: uuids,
         data: data,
     }
 }
