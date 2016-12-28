@@ -9,7 +9,7 @@ Updating logMetadata should be handled by the caller.
 package main
 
 type MetadataTuple struct {
-    uuids           []string //TODOL Swtich to array of strings to allow for batch operations
+    uuids           []string
     data       []byte
 }
 

@@ -10,7 +10,8 @@ import (
 )
 
 const (
-    BatchSize = 10
+    WindowBatchSize = 10
+    MetadataBatchSize = 10
 )
 
 type NetworkReader struct {
@@ -42,13 +43,30 @@ func (r *NetworkReader) readUuids(src string) []string {
 
 func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
     windows := make([]*Window, len(uuids))
+    uuidsToBatch := make([]string, WindowBatchSize)
+    length := len(uuids)
+    count := 0
     for i, uuid := range uuids {
-        windows[i] = r.readWindow(src, uuid)
+        uuidsToBatch = append(uuidsToBatch, uuid)
+        count++
+
+        if count == WindowBatchSize || i == (length - 1) {
+            newWindows := r.readWindowsBatched(src, uuidsToBatch)
+            fmt.Println(newWindows)
+            windows = append(windows, newWindows...)
+            uuidsToBatch = make([]string, WindowBatchSize)
+            count = 0
+        }
     }
+
+    // for i, uuid := range uuids {
+        // windows[i] = r.readWindow(src, uuid)
+    // }
     return windows
 }
 
 func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window {
+    fmt.Println("batching", len(uuids), "windows")
     windows := make([]*Window, len(uuids))
     query := "select window(365d) data in (0, now) where uuid ="
 
@@ -108,13 +126,12 @@ func (r *NetworkReader) readWindow(src string, uuid string) *Window {
     return window
 }
 
-//if want to batch queries, modify MetadataTuple to have an array of uuids instead of just one for logging.
 func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) {
     if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
         return
     }
 
-    uuidsToBatch := make([]string, BatchSize)
+    uuidsToBatch := make([]string, MetadataBatchSize)
     length := len(uuids)
     count := 0
     for i, uuid := range uuids {
@@ -125,24 +142,17 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
         uuidsToBatch = append(uuidsToBatch, uuid)
         count++
 
-        if count == 10 || i == (length - 1) {
+        if count == MetadataBatchSize || i == (length - 1) {
             r.readMetadataBatched(src, uuidsToBatch, dataChan)
-            uuidsToBatch = make([]string, BatchSize)
+            uuidsToBatch = make([]string, MetadataBatchSize)
             count = 0
         }
-
-        // query := "select * where uuid='" + uuid + "'"
-        // body := r.makeQuery(src, query)
-        // dataChan <- r.makeMetadataTuple([]string{uuid}, body)
     }
     close(dataChan)
 }
 
 //helper function
 func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan chan *MetadataTuple) {
-    if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
-        return
-    }
     query := "select * where uuid ="
 
     var uuidsToBatch []string

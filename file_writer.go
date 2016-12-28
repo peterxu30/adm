@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"strconv"
-	"strings"
 )
 
 
@@ -147,12 +145,6 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	if err != nil {
 		panic(err)
 	}
-
-	fileNumber := LogStatus(w.getFileNumber(dest))
-	pred := func(current LogStatus) bool {
-		return current < fileNumber
-	}
-	w.log.checkAndUpdateLogMetadata(NUM_FILES_WRITTEN, pred, fileNumber)
 }
 
 /*
@@ -163,13 +155,4 @@ func (w *FileWriter) fileExists(file string) bool {
 		return true
 	}
 	return false
-}
-
-func (w *FileWriter) getFileNumber(file string) int {
-	number := strings.SplitAfterN(file, "ts", 2)[1]
-	num, err := strconv.Atoi(number)
-	if err != nil {
-		panic(err)
-	}
-	return num
 }

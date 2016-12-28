@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
+	"sync"
 )
 
 type LogStatus uint16
@@ -35,11 +36,11 @@ const (
 	UUIDS_WRITTEN = "uuids_written"
 	METADATA_WRITTEN = "metadata_written"
 	TIMESERIES_WRITTEN = "timeseries_written"
-	NUM_FILES_WRITTEN = "files_written"
 )
 
 type Logger struct {
 	log *bolt.DB
+	metadataLock *sync.Mutex
 }
 
 func newLogger() *Logger {
@@ -86,6 +87,7 @@ func newLoggerWithName(name string) *Logger {
 
 	logger := Logger{
 		log: db,
+		metadataLock: &sync.Mutex{},
 	}
 
 	//check if this is first initialization of read_uuids
@@ -109,10 +111,6 @@ func newLoggerWithName(name string) *Logger {
 
 	if logger.getLogMetadata(TIMESERIES_WRITTEN) == NIL {
 		logger.updateLogMetadata(TIMESERIES_WRITTEN, NOT_STARTED)
-	}
-
-	if logger.getLogMetadata(NUM_FILES_WRITTEN) == NIL {
-		logger.updateLogMetadata(NUM_FILES_WRITTEN, 0)
 	}
 
 	return &logger

@@ -95,7 +95,8 @@ func (adm *ADMManager) processTimeseriesData() {
 
     fmt.Println("About to start processing timeseries data")
 
-    windows := adm.reader.readWindows(adm.url, adm.uuids)
+    windows := adm.processWindows() //TODO: Untested.
+    //windows := adm.reader.readWindows(adm.url, adm.uuids)
 
     var wg sync.WaitGroup
     fileCount := 0
@@ -157,6 +158,46 @@ func (adm *ADMManager) processTimeseriesData() {
 
     wg.Wait()
     adm.log.updateLogMetadata(TIMESERIES_WRITTEN, WRITE_COMPLETE)
+}
+
+//TODO: Function untested.
+func (adm *ADMManager) processWindows() []*Window {
+    //1. Find minimum number free resources from workers and openIO
+    minFreeWorkers := WorkerSize - adm.workers.count()
+    minFreeOpenIO := OpenIO - adm.openIO.count()
+    minFreeResources := minFreeWorkers
+    if minFreeOpenIO < minFreeWorkers {
+        minFreeResources = minFreeOpenIO
+    }
+
+    //2. number of uuids / min free resources = number of uuids per routine
+    length := len(adm.uuids)
+    numUuidsPerRoutine := len(adm.uuids) / minFreeResources
+    //3. each routine runs adm.reader.readWindows on a fixed range
+    windows := make([]*Window, length)
+    var wg sync.WaitGroup
+    for i := 0; i < length; i += numUuidsPerRoutine {
+        end := i + numUuidsPerRoutine
+
+        if end > length {
+            end = length
+        }
+
+        adm.workers.acquire()
+        adm.openIO.acquire()
+        wg.Add(1)
+        go func(start int, end int, windows []*Window) {
+            defer adm.workers.release()
+            defer adm.openIO.release()
+            defer wg.Done()
+            windowSlice := adm.reader.readWindows(adm.url, adm.uuids[start:end])
+            for i, window := range windowSlice {
+                windows[start + i] = window
+            }
+        }(i, end, windows)
+    }
+    wg.Wait()
+    return windows
 }
 
 func (adm *ADMManager) run() {
