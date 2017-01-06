@@ -3,6 +3,8 @@
 //However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
 //Make a function that encloses all the parallelization logic. Acquiring/releasing resources etc.
 
+//TODO: FIX ALL APPEND. MAKING AN ARRAY INSTANTIATES IT WITH NIL VALUES AND APPEND ADDS TO END, STILL RETAINING NIL VALUES.
+
 package main
 
 import (
@@ -190,11 +192,15 @@ func (adm *ADMManager) processWindows() []*Window {
             defer adm.workers.release()
             defer adm.openIO.release()
             defer wg.Done()
+            fmt.Println("Processing windows", start, end)
             windowSlice := adm.reader.readWindows(adm.url, adm.uuids[start:end])
+            fmt.Println(start, end, adm.uuids[start:end], windowSlice)
             for i, window := range windowSlice {
+                fmt.Println(start, i)
                 windows[start + i] = window
             }
         }(i, end, windows)
+        fmt.Println("Go routine created.", i, end)
     }
     wg.Wait()
     return windows

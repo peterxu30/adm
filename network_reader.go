@@ -42,32 +42,28 @@ func (r *NetworkReader) readUuids(src string) []string {
 }
 
 func (r *NetworkReader) readWindows(src string, uuids []string) []*Window {
-    windows := make([]*Window, len(uuids))
-    uuidsToBatch := make([]string, WindowBatchSize)
+    fmt.Println("read windows uuid length", len(uuids))
+    windows := make([]*Window, 0) //TODO: possible bug?
+    uuidsToBatch := make([]string, 0)
     length := len(uuids)
-    count := 0
     for i, uuid := range uuids {
+        
         uuidsToBatch = append(uuidsToBatch, uuid)
-        count++
 
-        if count == WindowBatchSize || i == (length - 1) {
+        if len(uuidsToBatch) == WindowBatchSize || i < (length - 1) {}
             newWindows := r.readWindowsBatched(src, uuidsToBatch)
-            fmt.Println(newWindows)
+            fmt.Println(len(uuidsToBatch), len(newWindows))
             windows = append(windows, newWindows...)
-            uuidsToBatch = make([]string, WindowBatchSize)
-            count = 0
+            uuidsToBatch = make([]string, 0)
         }
     }
 
-    // for i, uuid := range uuids {
-        // windows[i] = r.readWindow(src, uuid)
-    // }
     return windows
 }
 
 func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window {
     fmt.Println("batching", len(uuids), "windows")
-    windows := make([]*Window, len(uuids))
+    windows := make([]*Window, 0)
     query := "select window(365d) data in (0, now) where uuid ="
 
     var readBefore []*Window
@@ -90,9 +86,15 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) []*Window
         err := json.Unmarshal(body, &windows)
         if err != nil {
             fmt.Println("batch window read failed")
+            fmt.Println(body)
         }
 
         for _, window := range windows {
+            fmt.Println(window)
+            if window == nil {
+                fmt.Println("nil window")
+                continue
+            }
             r.log.updateWindowStatus(window.Uuid, window)
         }
     }
@@ -131,21 +133,18 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
         return
     }
 
-    uuidsToBatch := make([]string, MetadataBatchSize)
+    uuidsToBatch := make([]string, 0)
     length := len(uuids)
-    count := 0
     for i, uuid := range uuids {
         if r.log.getUuidMetadataStatus(uuid) == WRITE_COMPLETE {
             continue
         }
 
         uuidsToBatch = append(uuidsToBatch, uuid)
-        count++
 
-        if count == MetadataBatchSize || i == (length - 1) {
+        if len(uuidsToBatch) == MetadataBatchSize || i == (length - 1) {
             r.readMetadataBatched(src, uuidsToBatch, dataChan)
-            uuidsToBatch = make([]string, MetadataBatchSize)
-            count = 0
+            uuidsToBatch = make([]string, 0)
         }
     }
     close(dataChan)
