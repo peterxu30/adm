@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	// "log"
 	"os"
 )
 
@@ -17,22 +19,29 @@ func newFileWriter(log *Logger) *FileWriter {
 	}
 }
 
-func (w *FileWriter) writeUuids(dest string, uuids []string) {
+func (w *FileWriter) writeUuids(dest string, uuids []string) (err error) {
 	if w.log.getLogMetadata(UUIDS_WRITTEN) == WRITE_COMPLETE {
 		return
 	}
 
 	body, err := json.Marshal(uuids)
 	if err != nil {
-		panic(err)
+		// log.Println("writeUuids: could not marshal uuids \n reason:", err)
+		err = fmt.Errorf("writeUuids: could not marshal uuids:", uuids, "err:", err) //TODO: HANDLE ERRORS LIKE THIS
+		return
 	}
+
 	err = ioutil.WriteFile(dest, body, 0644)
 	if err != nil {
-		panic(err)
+		// log.Println("writeUuids: could not write uuids. err:", err)
+		err = fmt.Errorf("writeUuids: could not write uuids:", uuids, "err:", err)
+		return
 	}
+
+	return
 }
 
-func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
+func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (err error) {
 	if w.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
 		return
 	}
@@ -40,13 +49,15 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
-	        panic(err)
+	    	// log.Println("writeMetadata: could not create metadata file. err:", err)
+	    	return fmt.Errorf("writeMetadata: could not create metadata file:", dest, "err:", err)
 	    }
 	}
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		// log.Println("writeMetadata: could not open metadata file. err:", err)
+		return fmt.Errorf("writeMetadata: could not open metadata file:", dest, "err:", err)
 	}
 
 	first := true
@@ -63,7 +74,7 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
 			}
 		} else {
 			first = false
@@ -71,7 +82,7 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 
 		_, err := f.Write(tuple.data)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("writeMetadata: could not write uuids:", tuple.uuids, "to metadata file:", dest, "err:", err)
 		}
 		wrote = true
 
@@ -83,17 +94,19 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) {
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
 	}
+
+	return
 }
 
-func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) {
+func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) (err error) {
 	if w.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
 		return
 	}
@@ -101,13 +114,13 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
-	        panic(err)
+			return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
 	    }
 	}
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
 	}
 
 	first := true
@@ -120,7 +133,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
-				panic(err)
+				return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
 			}
 		} else {
 			first = false
@@ -128,7 +141,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 
 		_, err := f.Write(tuple.data)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("writeTimeseriesData: could not write slot:", tuple.slot, "to timeseries data file:", dest, "err:", err)
 		}
 		wrote = true
 		w.log.updateUuidTimeseriesStatus(tuple.slot, WRITE_COMPLETE)
@@ -137,14 +150,16 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
 	}
+
+	return
 }
 
 /*

@@ -1,9 +1,7 @@
 //TODO: At the moment, the log is checked at every level to see if a job was done or not. After adm methods are better flushed out, go back and consider where logging is most effective.
-//Thought: Right now, uuids and window queries are written to the log for on disk retrieval in event of crash. Writing to log slows down program in exchange for betetr crash recovery performance.
+//TODO: Error handling. Switch all (non-debugging) fmt.Println with log.Println. Don't panic unless its unrecoverable.
+//Thought: Right now, uuids and window queries are written to the log for on disk retrieval in event of crash. Writing to log slows down program in exchange for better crash recovery performance.
 //However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
-//Make a function that encloses all the parallelization logic. Acquiring/releasing resources etc.
-
-//TODO: FIX ALL APPEND. MAKING AN ARRAY INSTANTIATES IT WITH NIL VALUES AND APPEND ADDS TO END, STILL RETAINING NIL VALUES.
 
 package main
 
@@ -51,17 +49,26 @@ func newADMManager(url string, workerSize int, openIO int) *ADMManager {
 }
 
 func (adm *ADMManager) processUuids() {
-    adm.uuids = adm.reader.readUuids(adm.url)
-    adm.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
+    uuids, err := adm.reader.readUuids(adm.url)
+    if err == nil {
+        adm.uuids = uuids
+        for _, uuid := range adm.uuids {
+            adm.log.updateUuidMetadataStatus(uuid, NOT_STARTED)
+        }
+        adm.log.updateLogMetadata(UUIDS_FETCHED, WRITE_COMPLETE)
+    } else {
+        log.Println(err)
+    }
 }
 
 func (adm *ADMManager) processMetadata() {
     if adm.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
-        fmt.Println("Writing metadata complete")
+        fmt.Println("processMetadata: Writing metadata complete")
         return
     }
 
     dataChan := make(chan *MetadataTuple)
+    errored := false
     var wg sync.WaitGroup
     wg.Add(2)
 
@@ -71,7 +78,7 @@ func (adm *ADMManager) processMetadata() {
         defer adm.workers.release()
         defer adm.openIO.release()
         defer wg.Done()
-        fmt.Println("Starting to read metadata")
+        fmt.Println("processMetadata: Starting to read metadata")
         adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
     }()
 
@@ -81,21 +88,29 @@ func (adm *ADMManager) processMetadata() {
         defer adm.workers.release()
         defer adm.openIO.release()
         defer wg.Done()
-        fmt.Println("Starting to write metadata")
-        adm.writer.writeMetadata(MetadataDestination, dataChan)
+        fmt.Println("processMetadata: Starting to write metadata")
+        err := adm.writer.writeMetadata(MetadataDestination, dataChan)
+        if err != nil {
+            log.Println(err)
+            errored = true
+        }
     }()
 
     wg.Wait()
-    adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
+
+    if !errored {
+        adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
+    }
+
 }
 
 func (adm *ADMManager) processTimeseriesData() {
     if adm.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
-        fmt.Println("Writing timeseries complete")
+        fmt.Println("processTimeseriesData: Writing timeseries complete")
         return
     }
 
-    fmt.Println("About to start processing timeseries data")
+    fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
     windows := adm.processWindows() //TODO: Untested.
     //windows := adm.reader.readWindows(adm.url, adm.uuids)
@@ -104,7 +119,8 @@ func (adm *ADMManager) processTimeseriesData() {
     fileCount := 0
     currentSize := 0
     slotsToWrite := make([]*TimeSlot, 0)
-    fmt.Println("got windows")
+    errored := false
+    fmt.Println("processTimeseriesData: got windows")
     for _, window := range windows { //each window represents one uuid
 
         if window == nil {
@@ -147,7 +163,11 @@ func (adm *ADMManager) processTimeseriesData() {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
-                    adm.writer.writeTimeseriesData(fileName, dataChan) //TODO: dest is not always a file name. Depends on the writer type. Write a function that returns dest based on writer type.
+                    err := adm.writer.writeTimeseriesData(fileName, dataChan) //TODO: dest is not always a file name. Depends on the writer type. Write a function that returns dest based on writer type.
+                    if err != nil {
+                        log.Println(err)
+                        errored = true
+                    }
                 }(fileName)
 
                 currentSize = timeSlot.Count
@@ -159,7 +179,9 @@ func (adm *ADMManager) processTimeseriesData() {
     }
 
     wg.Wait()
-    adm.log.updateLogMetadata(TIMESERIES_WRITTEN, WRITE_COMPLETE)
+    if !errored {
+        adm.log.updateLogMetadata(TIMESERIES_WRITTEN, WRITE_COMPLETE)
+    }
 }
 
 //TODO: Function untested.
@@ -192,16 +214,21 @@ func (adm *ADMManager) processWindows() []*Window {
             defer adm.workers.release()
             defer adm.openIO.release()
             defer wg.Done()
-            fmt.Println("Processing windows", start, end)
-            windowSlice := adm.reader.readWindows(adm.url, adm.uuids[start:end])
-            fmt.Println(start, end, adm.uuids[start:end], windowSlice)
+            fmt.Println("processWindows: Processing windows", start, end)
+            windowSlice, err := adm.reader.readWindows(adm.url, adm.uuids[start:end])
+            if err != nil {
+                log.Println(err)
+                return
+            }
+            fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
             for i, window := range windowSlice {
                 fmt.Println(start, i)
                 windows[start + i] = window
             }
         }(i, end, windows)
-        fmt.Println("Go routine created.", i, end)
+        fmt.Println("processWindows: Go routine created.", i, end)
     }
+    fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
     wg.Wait()
     return windows
 }
@@ -228,7 +255,7 @@ func (adm *ADMManager) run() {
             defer wg.Done()
             adm.processTimeseriesData()
         }()
-        fmt.Println("Waiting")
+        fmt.Println("run: Waiting")
         wg.Wait()
 
         finished = adm.checkIfMetadataProcessed() && adm.checkIfTimeseriesProcessed()

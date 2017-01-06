@@ -21,7 +21,7 @@ type TimeseriesData struct {
 }
 
 type Writer interface { //allows writing to file or to endpoint
-	writeUuids(dest string, uuids []string) //relatively small size. can be accomplished without use of channels.
-	writeMetadata(dest string, dataChan chan *MetadataTuple)
-	writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple)
+	writeUuids(dest string, uuids []string) (err error)//relatively small size. can be accomplished without use of channels.
+	writeMetadata(dest string, dataChan chan *MetadataTuple) (err error)
+	writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) (err error)
 }
