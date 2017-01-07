@@ -116,7 +116,7 @@ func (adm *ADMManager) processTimeseriesData() {
     //windows := adm.reader.readWindows(adm.url, adm.uuids)
 
     var wg sync.WaitGroup
-    fileCount := 0
+    fileCount := 0 //consider maintaining file count outside of function.
     currentSize := 0
     slotsToWrite := make([]*TimeSlot, 0)
     errored := false

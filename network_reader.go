@@ -189,9 +189,16 @@ func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan
         if err != nil {
             // log.Println("readMetadataBatched: query failed for uuids:", uuids, "err:", err)
             return fmt.Errorf("readMetadataBatched: query failed for uuids:", uuids, "err:", err)
-        } else {
-            dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
         }
+
+        //TODO: UNTESTED
+        var metadata []*Metadata
+        err = json.Unmarshal(body, &metadata)
+        if err != nil {
+            return fmt.Errorf("readMetadataBatched: could not unmarshal uuids:", uuids, "err:", err)
+        }
+        
+        dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
     }
     return
 }
@@ -213,9 +220,19 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
         
         if err != nil {
             log.Println("readTimeseriesData: query failed for uuid:", slot.Uuid, "err:", err)
-        } else {
+        }
+
+        //TODO: UNTESTED
+        var timeseries []*TimeseriesData
+        err = json.Unmarshal(body, &timeseries)
+        if err != nil {
+            log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
+        }
+
+        if err == nil {
             dataChan <- r.makeTimeseriesTuple(slot, body)
         }
+
     }
     close(dataChan)
 }
