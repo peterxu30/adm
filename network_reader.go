@@ -142,7 +142,7 @@ func (r *NetworkReader) readWindow(src string, uuid string) (window *Window, err
     return
 }
 
-func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) {
+func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) (err error) {
     if r.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
         return
     }
@@ -159,12 +159,14 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
         if len(uuidsToBatch) == MetadataBatchSize || i == (length - 1) {
             err := r.readMetadataBatched(src, uuidsToBatch, dataChan)
             if err != nil {
-                log.Println("readMetadata: err:", err)
+                // log.Println("readMetadata: err:", err)
+                return fmt.Errorf("readMetadata: err:", err)
             }
             uuidsToBatch = make([]string, 0)
         }
     }
     close(dataChan)
+    return
 }
 
 //helper function
@@ -191,7 +193,6 @@ func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan
             return fmt.Errorf("readMetadataBatched: query failed for uuids:", uuids, "err:", err)
         }
 
-        //TODO: UNTESTED
         var metadata []*Metadata
         err = json.Unmarshal(body, &metadata)
         if err != nil {
@@ -203,7 +204,7 @@ func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan
     return
 }
 
-func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) {
+func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) (err error) {
     if r.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
         return
     }
@@ -226,15 +227,14 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
         var timeseries []*TimeseriesData
         err = json.Unmarshal(body, &timeseries)
         if err != nil {
-            log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
+            // log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
+            return fmt.Errorf("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
         }
 
-        if err == nil {
-            dataChan <- r.makeTimeseriesTuple(slot, body)
-        }
-
+        dataChan <- r.makeTimeseriesTuple(slot, body)
     }
     close(dataChan)
+    return
 }
 
 /* General purpose function to make an HTTP POST request to the specified url
