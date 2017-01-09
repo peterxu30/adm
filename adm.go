@@ -22,6 +22,7 @@ const (
     FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
     OpenIO = 15
+    TryAgainInterval = 3
 )
 
 type ADMManager struct {
@@ -70,31 +71,86 @@ func (adm *ADMManager) processMetadata() {
     dataChan := make(chan *MetadataTuple)
     errored := false
     var wg sync.WaitGroup
-    wg.Add(2)
+    wg.Add(3)
 
     adm.workers.acquire()
-    adm.openIO.acquire()
-    go func() {
+    go func() { //TODO: UNTESTED
         defer adm.workers.release()
-        defer adm.openIO.release()
         defer wg.Done()
-        fmt.Println("processMetadata: Starting to read metadata")
-        adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
-    }()
+        finished := false
+        failedAttempts := 0
+        while !finished { //condition should be check time
+            // errored = read
+            // errored = write
+            var errorCheckerWG sync.WaitGroup
+            errorCheckerWG.Add(2)
 
-    adm.workers.acquire()
-    adm.openIO.acquire()
-    go func() {
-        defer adm.workers.release()
-        defer adm.openIO.release()
-        defer wg.Done()
-        fmt.Println("processMetadata: Starting to write metadata")
-        err := adm.writer.writeMetadata(MetadataDestination, dataChan)
-        if err != nil {
-            log.Println(err)
-            errored = true
+            adm.workers.acquire()
+            adm.openIO.acquire()
+            go func() {
+                defer adm.workers.release()
+                defer adm.openIO.release()
+                // defer wg.Done()
+                defer errorCheckerWG.Done()
+                fmt.Println("processMetadata: Starting to read metadata")
+                err := adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
+                if err != nil {
+                    log.Println(err)
+                    errored = true
+                }
+            }()
+
+            adm.workers.acquire()
+            adm.openIO.acquire()
+            go func() {
+                defer adm.workers.release()
+                defer adm.openIO.release()
+                // defer wg.Done()
+                defer errorCheckerWG.Done()
+                fmt.Println("processMetadata: Starting to write metadata")
+                err := adm.writer.writeMetadata(MetadataDestination, dataChan)
+                if err != nil { //TODO: Better error handling
+                    log.Println(err)
+                    errored = true
+                }
+            }()
+
+            errorCheckerWG.Wait()
+
+            finished = !errored
+            if !finished {
+                failedAttempts++
+                time.Sleep(TryAgainInterval * failedAttempts * time.Second)
+            } else {
+                wg.Done()
+                wg.Done()
+            }
         }
-    }()
+    }
+
+    // adm.workers.acquire()
+    // adm.openIO.acquire()
+    // go func() {
+    //     defer adm.workers.release()
+    //     defer adm.openIO.release()
+    //     defer wg.Done()
+    //     fmt.Println("processMetadata: Starting to read metadata")
+    //     adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
+    // }()
+
+    // adm.workers.acquire()
+    // adm.openIO.acquire()
+    // go func() {
+    //     defer adm.workers.release()
+    //     defer adm.openIO.release()
+    //     defer wg.Done()
+    //     fmt.Println("processMetadata: Starting to write metadata")
+    //     err := adm.writer.writeMetadata(MetadataDestination, dataChan)
+    //     if err != nil { //TODO: Better error handling
+    //         log.Println(err)
+    //         errored = true
+    //     }
+    // }()
 
     wg.Wait()
 
@@ -148,27 +204,28 @@ func (adm *ADMManager) processTimeseriesData() {
                 wg.Add(2)
                 dataChan := make(chan *TimeseriesTuple)
 
+                //wrap in go function that checks for errors from either operation and repeats them if so with increasing periods of time
                 adm.workers.acquire()
                 adm.openIO.acquire()
-                go func(slotsToWrite []*TimeSlot) {
+                go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
                     adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
-                }(slotsToWrite)
+                }(slotsToWrite, dataChan)
 
                 adm.workers.acquire()
                 adm.openIO.acquire()
-                go func(fileName string) {
+                go func(fileName string, dataChan chan *TimeseriesTuple) {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
                     err := adm.writer.writeTimeseriesData(fileName, dataChan) //TODO: dest is not always a file name. Depends on the writer type. Write a function that returns dest based on writer type.
-                    if err != nil {
+                    if err != nil { //TODO: better error handling
                         log.Println(err)
                         errored = true
                     }
-                }(fileName)
+                }(fileName, dataChan)
 
                 currentSize = timeSlot.Count
                 fileCount++
@@ -237,7 +294,7 @@ func (adm *ADMManager) run() {
     adm.processUuids()
 
     finished := false
-    for !finished {
+    for !finished { //TODO: revisit this methodology
 
         var wg sync.WaitGroup
         wg.Add(2)
