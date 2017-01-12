@@ -12,6 +12,7 @@ import (
     "fmt"
     "log"
     "runtime"
+    // "os"
     "strconv"
     "sync"
     "time"
@@ -49,6 +50,8 @@ const (
 type ADMManager struct {
     url             string
     uuids           []string
+    readMode ReadMode
+    writeMode WriteMode
     reader Reader
     writer Writer
     workers *Sema
@@ -56,17 +59,42 @@ type ADMManager struct {
     log             *Logger
 }
 
-func newADMManager(url string, workerSize int, openIO int) *ADMManager {
-    log := newLogger()
-    reader := newNetworkReader(log) //TODO: dynamically choose appropriate reader/writer types
-    writer := newFileWriter(log)
+func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, writeMode WriteMode) *ADMManager {
+    logger := newLogger()
+
+    var reader Reader
+    switch readMode {
+        case RM_NETWORK:
+            reader = newNetworkReader(logger)
+            break
+        case RM_FILE:
+            break
+        default:
+            log.Println("read mode unknown")
+            return nil
+    }
+
+    var writer Writer
+    switch writeMode{
+        case WM_NETWORK:
+            break
+        case WM_FILE:
+            writer = newFileWriter(logger)
+            break
+        default:
+            log.Println("write mode unknown")
+            return nil
+    }
+
     return &ADMManager{
         url:      url,
+        readMode: readMode,
+        writeMode: writeMode,
         reader: reader,
         writer: writer,
         workers: newSema(workerSize),
         openIO: newSema(openIO),
-        log:      log,
+        log:      logger,
     }
 }
 
@@ -195,31 +223,91 @@ func (adm *ADMManager) processTimeseriesData() {
             currentSize += timeSlot.Count
 
             if currentSize >= FileSize { //convert to memory size check later
-                wg.Add(2)
-                dataChan := make(chan *TimeseriesTuple)
+                wg.Add(1)
+                returnChannel := make(chan error)
+                // dataChan := make(chan *TimeseriesTuple)
+
+                adm.workers.acquire()
+                go func(dest string, returnChannel chan error) {
+                    defer adm.workers.release()
+                    defer wg.Done()
+
+                    finished := false
+                    errored := false
+                    failedAttempts := 0
+                    for !finished && failedAttempts < MaxTries {
+                        var innerWg sync.WaitGroup
+                        innerWg.Add(2)
+                        dataChan := make(chan *TimeseriesTuple)
+
+                        adm.workers.acquire()
+                        adm.openIO.acquire()
+                        go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
+                            defer adm.workers.release()
+                            defer adm.openIO.release()
+                            defer innerWg.Done()
+                            err := adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
+                            if err != nil {
+                                log.Println(err)
+                                errored = true
+                            }
+                        }(slotsToWrite, dataChan)
+
+                        adm.workers.acquire()
+                        adm.openIO.acquire()
+                        go func(dest string, dataChan chan *TimeseriesTuple) {
+                            defer adm.workers.release()
+                            defer adm.openIO.release()
+                            defer innerWg.Done()
+                            err := adm.writer.writeTimeseriesData(dest, dataChan)
+                            if err != nil {
+                                log.Println(err)
+                                errored = true
+                            }
+                        }(dest, dataChan)
+
+                        innerWg.Wait()
+
+                        finished = !errored
+                        if !finished {
+                            failedAttempts++
+                            time.Sleep(time.Duration(TryAgainInterval * failedAttempts) * time.Second)
+                        }
+
+                    }
+
+                    if finished {
+                        returnChannel <- nil
+                    } else {
+                        returnChannel <- fmt.Errorf("processTimeseriesData: maximum attempts exceeded")
+                    }
+                    close(returnChannel)
+                }(dest(), returnChannel)
+
+
 
                 //wrap in go function that checks for errors from either operation and repeats them if so with increasing periods of time
-                adm.workers.acquire()
-                adm.openIO.acquire()
-                go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
-                    defer adm.workers.release()
-                    defer adm.openIO.release()
-                    defer wg.Done()
-                    adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
-                }(slotsToWrite, dataChan)
+                // adm.workers.acquire()
+                // adm.openIO.acquire()
+                // go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
+                //     defer adm.workers.release()
+                //     defer adm.openIO.release()
+                //     defer wg.Done()
+                //     adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
+                // }(slotsToWrite, dataChan)
 
-                adm.workers.acquire()
-                adm.openIO.acquire()
-                go func(dest string, dataChan chan *TimeseriesTuple) {
-                    defer adm.workers.release()
-                    defer adm.openIO.release()
-                    defer wg.Done()
-                    err := adm.writer.writeTimeseriesData(dest, dataChan)
-                    if err != nil { //TODO: better error handling
-                        log.Println(err)
-                        errored = true
-                    }
-                }(dest(), dataChan)
+                // adm.workers.acquire()
+                // adm.openIO.acquire()
+                // go func(dest string, dataChan chan *TimeseriesTuple) {
+                //     defer adm.workers.release()
+                //     defer adm.openIO.release()
+                //     defer wg.Done()
+                //     err := adm.writer.writeTimeseriesData(dest, dataChan)
+                //     if err != nil { //TODO: better error handling
+                //         log.Println(err)
+                //         errored = true
+                //     }
+                // }(dest(), dataChan)
 
                 currentSize = timeSlot.Count
                 slotsToWrite = make([]*TimeSlot, 0)
@@ -350,7 +438,7 @@ func (adm *ADMManager) checkIfTimeseriesProcessed() bool {
 }
 
 func main() {
-    adm := newADMManager(Url, WorkerSize, OpenIO)
+    adm := newADMManager(Url, WorkerSize, OpenIO, RM_NETWORK, WM_FILE)
     go func() {
         for {
             time.Sleep(2 * time.Second)
