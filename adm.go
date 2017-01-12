@@ -4,6 +4,7 @@
 //However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
 //Remove logging from reader/writer classes. Logging should only record successful batch operations, not partial success/failures.
 //Handle logging solely at the adm level. Remove window logging and/or handle it at adm level. Same with uuids
+//Move all written files to a folder. Sub-folder for timeseries. When reading from files, use filepath.Walk. Name of files doesn't matter. 
 
 package main
 
@@ -21,11 +22,28 @@ const (
     YearNS = 31536000000000000
     UuidDestination = "uuids.txt"
     MetadataDestination = "metadata1.txt"
+    TimeseriesDestination = "nil"
     FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
     OpenIO = 15
     MaxTries = 3
     TryAgainInterval = 3
+    ReaderType = RM_NETWORK
+    WriterType = WM_FILE
+)
+
+type ReadMode uint8
+
+type WriteMode uint8
+
+const (
+    RM_NETWORK ReadMode = iota + 1
+    RM_FILE
+)
+
+const (
+    WM_NETWORK WriteMode = iota + 1
+    WM_FILE
 )
 
 type ADMManager struct {
@@ -83,7 +101,7 @@ func (adm *ADMManager) processMetadata() (err error) {
         finished := false
         errored := false
         failedAttempts := 0
-        for !finished && failedAttempts < MaxTries { //condition should be check time
+        for !finished && failedAttempts < MaxTries {
             var innerWg sync.WaitGroup
             innerWg.Add(2)
             dataChan := make(chan *MetadataTuple)
@@ -110,7 +128,7 @@ func (adm *ADMManager) processMetadata() (err error) {
                 defer innerWg.Done()
                 fmt.Println("processMetadata: Starting to write metadata")
                 err := adm.writer.writeMetadata(MetadataDestination, dataChan)
-                if err != nil { //TODO: Better error handling
+                if err != nil {
                     log.Println(err)
                     errored = true
                 }
@@ -146,11 +164,10 @@ func (adm *ADMManager) processTimeseriesData() {
 
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
-    windows := adm.processWindows() //TODO: Untested.
-    //windows := adm.reader.readWindows(adm.url, adm.uuids)
+    windows := adm.processWindows()
 
     var wg sync.WaitGroup
-    fileCount := 0 //consider maintaining file count outside of function.
+    dest := adm.getTimeseriesDest()
     currentSize := 0
     slotsToWrite := make([]*TimeSlot, 0)
     errored := false
@@ -178,7 +195,6 @@ func (adm *ADMManager) processTimeseriesData() {
             currentSize += timeSlot.Count
 
             if currentSize >= FileSize { //convert to memory size check later
-                fileName := "ts" + strconv.Itoa(fileCount)
                 wg.Add(2)
                 dataChan := make(chan *TimeseriesTuple)
 
@@ -194,19 +210,18 @@ func (adm *ADMManager) processTimeseriesData() {
 
                 adm.workers.acquire()
                 adm.openIO.acquire()
-                go func(fileName string, dataChan chan *TimeseriesTuple) {
+                go func(dest string, dataChan chan *TimeseriesTuple) {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
-                    err := adm.writer.writeTimeseriesData(fileName, dataChan) //TODO: dest is not always a file name. Depends on the writer type. Write a function that returns dest based on writer type.
+                    err := adm.writer.writeTimeseriesData(dest, dataChan)
                     if err != nil { //TODO: better error handling
                         log.Println(err)
                         errored = true
                     }
-                }(fileName, dataChan)
+                }(dest(), dataChan)
 
                 currentSize = timeSlot.Count
-                fileCount++
                 slotsToWrite = make([]*TimeSlot, 0)
             }
             slotsToWrite = append(slotsToWrite, timeSlot)
@@ -266,6 +281,20 @@ func (adm *ADMManager) processWindows() []*Window {
     fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
     wg.Wait()
     return windows
+}
+
+func (adm *ADMManager) getTimeseriesDest() func() string {
+    fileCount := 0
+
+    return func() string {
+        if WriterType == WM_FILE {
+            dest := "ts_" + strconv.Itoa(fileCount)
+            fileCount++
+            return dest
+        } else {
+            return TimeseriesDestination          
+        }
+    }
 }
 
 func (adm *ADMManager) run() {
