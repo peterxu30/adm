@@ -1,3 +1,5 @@
+//delete the file on any error
+
 package main
 
 import (

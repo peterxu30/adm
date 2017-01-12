@@ -2,6 +2,8 @@
 //TODO: Error handling. Switch all (non-debugging) fmt.Println with log.Println. Don't panic unless its unrecoverable.
 //Thought: Right now, uuids and window queries are written to the log for on disk retrieval in event of crash. Writing to log slows down program in exchange for better crash recovery performance.
 //However, crash recovery is not what should be optimized. Inexpensive normal performance and expensive crash recovery is ideal. Revisit this.
+//Remove logging from reader/writer classes. Logging should only record successful batch operations, not partial success/failures.
+//Handle logging solely at the adm level. Remove window logging and/or handle it at adm level. Same with uuids
 
 package main
 
@@ -22,6 +24,7 @@ const (
     FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
     OpenIO = 15
+    MaxTries = 3
     TryAgainInterval = 3
 )
 
@@ -62,36 +65,35 @@ func (adm *ADMManager) processUuids() {
     }
 }
 
-func (adm *ADMManager) processMetadata() {
+func (adm *ADMManager) processMetadata() (err error) {
     if adm.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
         fmt.Println("processMetadata: Writing metadata complete")
         return
     }
 
-    dataChan := make(chan *MetadataTuple)
-    errored := false
     var wg sync.WaitGroup
-    wg.Add(3)
+    wg.Add(1)
+
+    returnChannel := make(chan error)
 
     adm.workers.acquire()
     go func() { //TODO: UNTESTED
         defer adm.workers.release()
         defer wg.Done()
         finished := false
+        errored := false
         failedAttempts := 0
-        while !finished { //condition should be check time
-            // errored = read
-            // errored = write
-            var errorCheckerWG sync.WaitGroup
-            errorCheckerWG.Add(2)
+        for !finished && failedAttempts < MaxTries { //condition should be check time
+            var innerWg sync.WaitGroup
+            innerWg.Add(2)
+            dataChan := make(chan *MetadataTuple)
 
             adm.workers.acquire()
             adm.openIO.acquire()
             go func() {
                 defer adm.workers.release()
                 defer adm.openIO.release()
-                // defer wg.Done()
-                defer errorCheckerWG.Done()
+                defer innerWg.Done()
                 fmt.Println("processMetadata: Starting to read metadata")
                 err := adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
                 if err != nil {
@@ -105,8 +107,7 @@ func (adm *ADMManager) processMetadata() {
             go func() {
                 defer adm.workers.release()
                 defer adm.openIO.release()
-                // defer wg.Done()
-                defer errorCheckerWG.Done()
+                defer innerWg.Done()
                 fmt.Println("processMetadata: Starting to write metadata")
                 err := adm.writer.writeMetadata(MetadataDestination, dataChan)
                 if err != nil { //TODO: Better error handling
@@ -115,49 +116,26 @@ func (adm *ADMManager) processMetadata() {
                 }
             }()
 
-            errorCheckerWG.Wait()
+            innerWg.Wait()
 
             finished = !errored
             if !finished {
                 failedAttempts++
-                time.Sleep(TryAgainInterval * failedAttempts * time.Second)
-            } else {
-                wg.Done()
-                wg.Done()
+                time.Sleep(time.Duration(TryAgainInterval * failedAttempts) * time.Second)
             }
         }
-    }
 
-    // adm.workers.acquire()
-    // adm.openIO.acquire()
-    // go func() {
-    //     defer adm.workers.release()
-    //     defer adm.openIO.release()
-    //     defer wg.Done()
-    //     fmt.Println("processMetadata: Starting to read metadata")
-    //     adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
-    // }()
-
-    // adm.workers.acquire()
-    // adm.openIO.acquire()
-    // go func() {
-    //     defer adm.workers.release()
-    //     defer adm.openIO.release()
-    //     defer wg.Done()
-    //     fmt.Println("processMetadata: Starting to write metadata")
-    //     err := adm.writer.writeMetadata(MetadataDestination, dataChan)
-    //     if err != nil { //TODO: Better error handling
-    //         log.Println(err)
-    //         errored = true
-    //     }
-    // }()
+        if finished {
+            adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
+            returnChannel <- nil
+        } else {
+            returnChannel <- fmt.Errorf("processMetadata: maximum attempts exceeded")
+        }
+        close(returnChannel)
+    }()
 
     wg.Wait()
-
-    if !errored {
-        adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
-    }
-
+    return <- returnChannel
 }
 
 func (adm *ADMManager) processTimeseriesData() {
@@ -303,7 +281,10 @@ func (adm *ADMManager) run() {
         go func() {
             defer adm.workers.release()
             defer wg.Done()
-            adm.processMetadata()
+            err := adm.processMetadata()
+            if err != nil {
+                log.Println(err)
+            }
         }()
 
         adm.workers.acquire()
