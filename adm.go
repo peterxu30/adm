@@ -192,13 +192,17 @@ func (adm *ADMManager) processTimeseriesData() {
 
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
-    windows := adm.processWindows()
+    windows, err := adm.processWindows()
+    if err != nil {
+        log.Println("processTimeseriesData: unable to retrieve windows, timeseries data cannot be processed")
+        return
+    }
 
     var wg sync.WaitGroup
     dest := adm.getTimeseriesDest()
     currentSize := 0
     slotsToWrite := make([]*TimeSlot, 0)
-    errored := false
+    anyError := false
     fmt.Println("processTimeseriesData: got windows")
     for _, window := range windows { //each window represents one uuid
 
@@ -228,7 +232,7 @@ func (adm *ADMManager) processTimeseriesData() {
                 // dataChan := make(chan *TimeseriesTuple)
 
                 adm.workers.acquire()
-                go func(dest string, returnChannel chan error) {
+                go func(dest string, slotsToWrite []*TimeSlot, returnChannel chan error) {
                     defer adm.workers.release()
                     defer wg.Done()
 
@@ -273,41 +277,21 @@ func (adm *ADMManager) processTimeseriesData() {
                             failedAttempts++
                             time.Sleep(time.Duration(TryAgainInterval * failedAttempts) * time.Second)
                         }
-
                     }
 
                     if finished {
                         returnChannel <- nil
                     } else {
-                        returnChannel <- fmt.Errorf("processTimeseriesData: maximum attempts exceeded")
+                        returnChannel <- fmt.Errorf("processTimeseriesData: maximum attempts exceeded for batch")
                     }
                     close(returnChannel)
-                }(dest(), returnChannel)
+                }(dest(), slotsToWrite, returnChannel)
 
-
-
-                //wrap in go function that checks for errors from either operation and repeats them if so with increasing periods of time
-                // adm.workers.acquire()
-                // adm.openIO.acquire()
-                // go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
-                //     defer adm.workers.release()
-                //     defer adm.openIO.release()
-                //     defer wg.Done()
-                //     adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
-                // }(slotsToWrite, dataChan)
-
-                // adm.workers.acquire()
-                // adm.openIO.acquire()
-                // go func(dest string, dataChan chan *TimeseriesTuple) {
-                //     defer adm.workers.release()
-                //     defer adm.openIO.release()
-                //     defer wg.Done()
-                //     err := adm.writer.writeTimeseriesData(dest, dataChan)
-                //     if err != nil { //TODO: better error handling
-                //         log.Println(err)
-                //         errored = true
-                //     }
-                // }(dest(), dataChan)
+                err := <- returnChannel
+                if err != nil {
+                    log.Println(err)
+                    anyError = true
+                }
 
                 currentSize = timeSlot.Count
                 slotsToWrite = make([]*TimeSlot, 0)
@@ -317,13 +301,12 @@ func (adm *ADMManager) processTimeseriesData() {
     }
 
     wg.Wait()
-    if !errored {
+    if !anyError {
         adm.log.updateLogMetadata(TIMESERIES_WRITTEN, WRITE_COMPLETE)
     }
 }
 
-//TODO: Function untested.
-func (adm *ADMManager) processWindows() []*Window {
+func (adm *ADMManager) processWindows() (windows []*Window, err error) {
     //1. Find minimum number free resources from workers and openIO
     minFreeWorkers := WorkerSize - adm.workers.count()
     minFreeOpenIO := OpenIO - adm.openIO.count()
@@ -336,8 +319,8 @@ func (adm *ADMManager) processWindows() []*Window {
     length := len(adm.uuids)
     numUuidsPerRoutine := len(adm.uuids) / minFreeResources
     //3. each routine runs adm.reader.readWindows on a fixed range
-    windows := make([]*Window, length)
     var wg sync.WaitGroup
+    errored := false
     for i := 0; i < length; i += numUuidsPerRoutine {
         end := i + numUuidsPerRoutine
 
@@ -352,23 +335,41 @@ func (adm *ADMManager) processWindows() []*Window {
             defer adm.workers.release()
             defer adm.openIO.release()
             defer wg.Done()
-            fmt.Println("processWindows: Processing windows", start, end)
-            windowSlice, err := adm.reader.readWindows(adm.url, adm.uuids[start:end])
-            if err != nil {
-                log.Println(err)
-                return
+
+            finished := false
+            attempts := 0
+            var windowSlice []*Window
+            for !finished && attempts < MaxTries {
+                fmt.Println("processWindows: Processing windows", start, end)
+                windowSlice, err = adm.reader.readWindows(adm.url, adm.uuids[start:end])
+                if err != nil {
+                    log.Println(err)
+                } else {
+                    finished = true
+                }
+                attempts++
             }
-            fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
-            for i, window := range windowSlice {
-                fmt.Println(start, i)
-                windows[start + i] = window
+
+            if finished {
+                fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
+                for i, window := range windowSlice {
+                    fmt.Println(start, i)
+                    windows[start + i] = window
+                }
+            } else {
+                errored = true
             }
         }(i, end, windows)
+
         fmt.Println("processWindows: Go routine created.", i, end)
     }
     fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
     wg.Wait()
-    return windows
+
+    if errored {
+        return nil, fmt.Errorf("processWindows: failed to process windows")
+    }
+    return windows, nil
 }
 
 func (adm *ADMManager) getTimeseriesDest() func() string {
@@ -389,7 +390,8 @@ func (adm *ADMManager) run() {
     adm.processUuids()
 
     finished := false
-    for !finished { //TODO: revisit this methodology
+    attempts := 0
+    for !finished && attempts < MaxTries { //TODO: revisit this methodology
 
         var wg sync.WaitGroup
         wg.Add(2)
@@ -413,7 +415,12 @@ func (adm *ADMManager) run() {
         fmt.Println("run: Waiting")
         wg.Wait()
 
+        attempts++
         finished = adm.checkIfMetadataProcessed() && adm.checkIfTimeseriesProcessed()
+    }
+
+    if !finished {
+        log.Println("adm was unable to complete the job")
     }
 }
 
