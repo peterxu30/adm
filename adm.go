@@ -12,7 +12,7 @@ import (
     "fmt"
     "log"
     "runtime"
-    // "os"
+    "os"
     "strconv"
     "sync"
     "time"
@@ -21,6 +21,8 @@ import (
 const (
     Url = "http://128.32.37.201:8079/api/query"
     YearNS = 31536000000000000
+    DataFolder = "data/"
+    TimeseriesFolder = "timeseries/"
     UuidDestination = "uuids.txt"
     MetadataDestination = "metadata1.txt"
     TimeseriesDestination = "nil"
@@ -62,14 +64,14 @@ type ADMManager struct {
 func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, writeMode WriteMode) *ADMManager {
     logger := newLogger()
 
-    reader := getReader(readMode)
+    reader := configureReader(readMode)
 
     if reader == nil {
         log.Println("fatal: read mode unknown")
         return nil
     }
 
-    writer := getWriter(writeMode)
+    writer := configureWriter(writeMode)
 
     if writer == nil {
         log.Println("fatal: write mode unknown")
@@ -88,7 +90,7 @@ func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, wr
     }
 }
 
-func getReader(mode ReadMode) Reader {
+func configureReader(mode ReadMode) Reader {
     switch mode {
         case RM_NETWORK:
             return newNetworkReader()
@@ -101,12 +103,17 @@ func getReader(mode ReadMode) Reader {
     return nil
 }
 
-func getWriter(mode WriteMode) Writer {
+func configureWriter(mode WriteMode) Writer {
     switch mode {
         case WM_NETWORK:
             fmt.Println("network writer not yet developed")
             break
         case WM_FILE:
+            err := os.MkdirAll(DataFolder + TimeseriesFolder, os.ModePerm)
+            if err != nil {
+                log.Println("configureWriter: could not create data folder")
+                return nil
+            }
             return newFileWriter()
         default:
             log.Println("write mode unknown")
@@ -150,6 +157,7 @@ func (adm *ADMManager) processMetadata() {
         finished := false
         errored := false
         attempts := 0
+        dest := adm.getMetadataDest()
         for !finished && attempts < MaxTries {
             var innerWg sync.WaitGroup
             innerWg.Add(2)
@@ -176,7 +184,7 @@ func (adm *ADMManager) processMetadata() {
                 defer adm.openIO.release()
                 defer innerWg.Done()
                 fmt.Println("processMetadata: Starting to write metadata")
-                err := adm.writer.writeMetadata(MetadataDestination, dataChan)
+                err := adm.writer.writeMetadata(dest(), dataChan)
                 if err != nil {
                     log.Println(err)
                     errored = true
@@ -204,6 +212,19 @@ func (adm *ADMManager) processMetadata() {
     }()
 
     wg.Wait()
+}
+
+func (adm *ADMManager) getMetadataDest() func() string {
+    return func() string {
+        switch adm.readMode {
+            case RM_FILE:
+                return MetadataDestination //placeholder
+            case RM_NETWORK:
+                return MetadataDestination
+            default:
+                return MetadataDestination //placeholder
+        }
+    }
 }
 
 func (adm *ADMManager) processTimeseriesData() {
@@ -391,12 +412,15 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
 func (adm *ADMManager) getTimeseriesDest() func() string {
     fileCount := 0
     return func() string {
-        if adm.writeMode == WM_FILE {
-            dest := "ts_" + strconv.Itoa(fileCount)
-            fileCount++
-            return dest
-        } else {
-            return TimeseriesDestination          
+        switch adm.writeMode {
+            case WM_FILE:
+                dest := TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
+                fileCount++
+                return dest
+            case WM_NETWORK:
+                return TimeseriesDestination //placeholder
+            default:
+                return TimeseriesDestination //placeholder        
         }
     }
 }
