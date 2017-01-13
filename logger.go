@@ -54,10 +54,11 @@ func newLoggerWithName(name string) *Logger {
 	}
 
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(UUID_METADATA_BUCKET))
+		_, err := tx.CreateBucketIfNotExists([]byte(METADATA_BUCKET))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
+
 		return nil
 	})
 
@@ -70,7 +71,7 @@ func newLoggerWithName(name string) *Logger {
 	})
 
 	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(METADATA_BUCKET))
+		_, err := tx.CreateBucketIfNotExists([]byte(UUID_METADATA_BUCKET))
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -126,17 +127,6 @@ func (logger *Logger) getLogMetadata(key string) LogStatus {
 func (logger *Logger) updateLogMetadata(key string, status LogStatus) error {
 	buf := convertToByteArray(status)
 	return logger.put(METADATA_BUCKET, []byte(key), buf)
-}
-
-func (logger *Logger) checkAndUpdateLogMetadata(key string, predicate func(current LogStatus) bool, newStatus LogStatus) error {
-	buf := convertToByteArray(newStatus)
-
-	pred := func(x []byte) bool {
-		status := convertFromBinaryToLogStatus(x)
-		return predicate(status)
-	}
-
-	return logger.checkAndUpdate(METADATA_BUCKET, []byte(key), pred, buf)
 }
 
 /* Window Data Functions */
@@ -231,18 +221,6 @@ func (logger *Logger) put(bucket string, key []byte, value []byte) error {
 	return logger.log.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucket))
 		err := b.Put(key, value)
-		return err
-	})
-}
-
-func (logger *Logger) checkAndUpdate(bucket string, key []byte, predicate func(x []byte) bool, value []byte) error {
-	return logger.log.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucket))
-		value := b.Get(key)
-		var err error = nil
-		if predicate(value) {
-			err = b.Put(key, value)
-		}
 		return err
 	})
 }
