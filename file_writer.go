@@ -11,21 +11,13 @@ import (
 )
 
 
-type FileWriter struct {
-	log *Logger
-}
+type FileWriter struct{}
 
-func newFileWriter(log *Logger) *FileWriter {
-	return &FileWriter{
-		log: log,
-	}
+func newFileWriter() *FileWriter {
+	return &FileWriter{}
 }
 
 func (w *FileWriter) writeUuids(dest string, uuids []string) (err error) {
-	if w.log.getLogMetadata(UUIDS_WRITTEN) == WRITE_COMPLETE {
-		return
-	}
-
 	body, err := json.Marshal(uuids)
 	if err != nil {
 		// log.Println("writeUuids: could not marshal uuids \n reason:", err)
@@ -44,10 +36,6 @@ func (w *FileWriter) writeUuids(dest string, uuids []string) (err error) {
 }
 
 func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (err error) {
-	if w.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
-		return
-	}
-
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
@@ -65,14 +53,6 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (e
 	first := true
 	wrote := false
 	for tuple := range dataChan {
-		for _, uuid := range tuple.uuids {
-			if w.log.getUuidMetadataStatus(uuid) != WRITE_COMPLETE {
-				break
-			} else {
-				continue
-			}
-		}
-
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
@@ -87,10 +67,6 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (e
 			return fmt.Errorf("writeMetadata: could not write uuids:", tuple.uuids, "to metadata file:", dest, "err:", err)
 		}
 		wrote = true
-
-		for _, uuid := range tuple.uuids {
-			w.log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
-		}
 	}
 
 	if wrote {
@@ -109,10 +85,6 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (e
 }
 
 func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) (err error) {
-	if w.log.getLogMetadata(TIMESERIES_WRITTEN) == WRITE_COMPLETE {
-		return
-	}
-
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
@@ -128,10 +100,6 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	first := true
 	wrote := false
 	for tuple := range dataChan {
-		if w.log.getUuidTimeseriesStatus(tuple.slot) == WRITE_COMPLETE {
-			continue
-		}
-
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
@@ -146,7 +114,6 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 			return fmt.Errorf("writeTimeseriesData: could not write slot:", tuple.slot, "to timeseries data file:", dest, "err:", err)
 		}
 		wrote = true
-		w.log.updateUuidTimeseriesStatus(tuple.slot, WRITE_COMPLETE)
 	}
 
 	if wrote {

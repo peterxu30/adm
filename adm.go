@@ -62,28 +62,18 @@ type ADMManager struct {
 func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, writeMode WriteMode) *ADMManager {
     logger := newLogger()
 
-    var reader Reader
-    switch readMode {
-        case RM_NETWORK:
-            reader = newNetworkReader(logger)
-            break
-        case RM_FILE:
-            break
-        default:
-            log.Println("read mode unknown")
-            return nil
+    reader := getReader(readMode)
+
+    if reader == nil {
+        log.Println("fatal: read mode unknown")
+        return nil
     }
 
-    var writer Writer
-    switch writeMode{
-        case WM_NETWORK:
-            break
-        case WM_FILE:
-            writer = newFileWriter(logger)
-            break
-        default:
-            log.Println("write mode unknown")
-            return nil
+    writer := getWriter(writeMode)
+
+    if writer == nil {
+        log.Println("fatal: write mode unknown")
+        return nil
     }
 
     return &ADMManager{
@@ -98,7 +88,40 @@ func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, wr
     }
 }
 
+func getReader(mode ReadMode) Reader {
+    switch mode {
+        case RM_NETWORK:
+            return newNetworkReader()
+        case RM_FILE:
+            fmt.Println("file reader not yet developed")
+            return nil
+        default:
+            return nil
+    }
+    return nil
+}
+
+func getWriter(mode WriteMode) Writer {
+    switch mode {
+        case WM_NETWORK:
+            fmt.Println("network writer not yet developed")
+            break
+        case WM_FILE:
+            return newFileWriter()
+        default:
+            log.Println("write mode unknown")
+            return nil
+    }
+    return nil
+}
+
 func (adm *ADMManager) processUuids() {
+    if (adm.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
+        fmt.Println("processUuids: uuids were previously read")
+        adm.uuids = adm.log.getUuidMetadataKeySet()
+        return
+    }
+
     uuids, err := adm.reader.readUuids(adm.url)
     if err == nil {
         adm.uuids = uuids
@@ -111,7 +134,7 @@ func (adm *ADMManager) processUuids() {
     }
 }
 
-func (adm *ADMManager) processMetadata() (err error) {
+func (adm *ADMManager) processMetadata() {
     if adm.log.getLogMetadata(METADATA_WRITTEN) == WRITE_COMPLETE {
         fmt.Println("processMetadata: Writing metadata complete")
         return
@@ -120,16 +143,14 @@ func (adm *ADMManager) processMetadata() (err error) {
     var wg sync.WaitGroup
     wg.Add(1)
 
-    returnChannel := make(chan error)
-
     adm.workers.acquire()
     go func() { //TODO: UNTESTED
         defer adm.workers.release()
         defer wg.Done()
         finished := false
         errored := false
-        failedAttempts := 0
-        for !finished && failedAttempts < MaxTries {
+        attempts := 0
+        for !finished && attempts < MaxTries {
             var innerWg sync.WaitGroup
             innerWg.Add(2)
             dataChan := make(chan *MetadataTuple)
@@ -165,23 +186,24 @@ func (adm *ADMManager) processMetadata() (err error) {
             innerWg.Wait()
 
             finished = !errored
-            if !finished {
-                failedAttempts++
-                time.Sleep(time.Duration(TryAgainInterval * failedAttempts) * time.Second)
+            if finished {
+                for _, uuid := range adm.uuids {
+                    adm.log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
+                }
+            } else { //incase parallelization of metadata processing is ever needed
+                time.Sleep(time.Duration(TryAgainInterval * attempts) * time.Second)
             }
+            attempts++
         }
 
         if finished {
             adm.log.updateLogMetadata(METADATA_WRITTEN, WRITE_COMPLETE)
-            returnChannel <- nil
         } else {
-            returnChannel <- fmt.Errorf("processMetadata: maximum attempts exceeded")
+            log.Println("processMetadata: maximum attempts exceeded")
         }
-        close(returnChannel)
     }()
 
     wg.Wait()
-    return <- returnChannel
 }
 
 func (adm *ADMManager) processTimeseriesData() {
@@ -228,18 +250,16 @@ func (adm *ADMManager) processTimeseriesData() {
 
             if currentSize >= FileSize { //convert to memory size check later
                 wg.Add(1)
-                returnChannel := make(chan error)
-                // dataChan := make(chan *TimeseriesTuple)
 
                 adm.workers.acquire()
-                go func(dest string, slotsToWrite []*TimeSlot, returnChannel chan error) {
+                go func(dest string, slotsToWrite []*TimeSlot) {
                     defer adm.workers.release()
                     defer wg.Done()
 
                     finished := false
                     errored := false
-                    failedAttempts := 0
-                    for !finished && failedAttempts < MaxTries {
+                    attempts := 0
+                    for !finished && attempts < MaxTries {
                         var innerWg sync.WaitGroup
                         innerWg.Add(2)
                         dataChan := make(chan *TimeseriesTuple)
@@ -273,25 +293,21 @@ func (adm *ADMManager) processTimeseriesData() {
                         innerWg.Wait()
 
                         finished = !errored
-                        if !finished {
-                            failedAttempts++
-                            time.Sleep(time.Duration(TryAgainInterval * failedAttempts) * time.Second)
+                        if finished {
+                            for _, slot := range slotsToWrite {
+                                adm.log.updateUuidTimeseriesStatus(slot, WRITE_COMPLETE)
+                            }
+                        } else {
+                            time.Sleep(time.Duration(TryAgainInterval * attempts) * time.Second)
                         }
+                        attempts++
                     }
 
-                    if finished {
-                        returnChannel <- nil
-                    } else {
-                        returnChannel <- fmt.Errorf("processTimeseriesData: maximum attempts exceeded for batch")
+                    if !finished {
+                        log.Println("processTimeseriesData: maximum attempts exceeded for batch")
+                        anyError = true
                     }
-                    close(returnChannel)
-                }(dest(), slotsToWrite, returnChannel)
-
-                err := <- returnChannel
-                if err != nil {
-                    log.Println(err)
-                    anyError = true
-                }
+                }(dest(), slotsToWrite)
 
                 currentSize = timeSlot.Count
                 slotsToWrite = make([]*TimeSlot, 0)
@@ -374,9 +390,8 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
 
 func (adm *ADMManager) getTimeseriesDest() func() string {
     fileCount := 0
-
     return func() string {
-        if WriterType == WM_FILE {
+        if adm.writeMode == WM_FILE {
             dest := "ts_" + strconv.Itoa(fileCount)
             fileCount++
             return dest
@@ -400,10 +415,7 @@ func (adm *ADMManager) run() {
         go func() {
             defer adm.workers.release()
             defer wg.Done()
-            err := adm.processMetadata()
-            if err != nil {
-                log.Println(err)
-            }
+            adm.processMetadata()
         }()
 
         adm.workers.acquire()
