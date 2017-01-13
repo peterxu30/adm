@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
-	"sync"
 )
 
 type LogStatus uint16
@@ -40,7 +39,6 @@ const (
 
 type Logger struct {
 	log *bolt.DB
-	metadataLock *sync.Mutex
 }
 
 func newLogger() *Logger {
@@ -88,7 +86,6 @@ func newLoggerWithName(name string) *Logger {
 
 	logger := Logger{
 		log: db,
-		metadataLock: &sync.Mutex{},
 	}
 
 	//check if this is first initialization of read_uuids
