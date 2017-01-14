@@ -151,7 +151,7 @@ func (adm *ADMManager) processMetadata() {
     wg.Add(1)
 
     adm.workers.acquire()
-    go func() { //TODO: UNTESTED
+    go func(wg *sync.WaitGroup) { //TODO: UNTESTED
         defer adm.workers.release()
         defer wg.Done()
         finished := false
@@ -165,7 +165,7 @@ func (adm *ADMManager) processMetadata() {
 
             adm.workers.acquire()
             adm.openIO.acquire()
-            go func() {
+            go func(wg *sync.WaitGroup) {
                 defer adm.workers.release()
                 defer adm.openIO.release()
                 defer innerWg.Done()
@@ -175,21 +175,21 @@ func (adm *ADMManager) processMetadata() {
                     log.Println(err)
                     errored = true
                 }
-            }()
+            }(&innerWg)
 
             adm.workers.acquire()
             adm.openIO.acquire()
-            go func() {
+            go func(wg *sync.WaitGroup) {
                 defer adm.workers.release()
                 defer adm.openIO.release()
-                defer innerWg.Done()
+                defer wg.Done()
                 fmt.Println("processMetadata: Starting to write metadata")
                 err := adm.writer.writeMetadata(dest(), dataChan)
                 if err != nil {
                     log.Println(err)
                     errored = true
                 }
-            }()
+            }(&innerWg)
 
             innerWg.Wait()
 
@@ -209,7 +209,7 @@ func (adm *ADMManager) processMetadata() {
         } else {
             log.Println("processMetadata: maximum attempts exceeded")
         }
-    }()
+    }(&wg)
 
     wg.Wait()
 }
@@ -218,11 +218,11 @@ func (adm *ADMManager) getMetadataDest() func() string {
     return func() string {
         switch adm.readMode {
             case RM_FILE:
-                return MetadataDestination //placeholder
+                return DataFolder + MetadataDestination //placeholder
             case RM_NETWORK:
-                return MetadataDestination
+                return DataFolder + MetadataDestination
             default:
-                return MetadataDestination //placeholder
+                return DataFolder + MetadataDestination //placeholder
         }
     }
 }
@@ -237,7 +237,7 @@ func (adm *ADMManager) processTimeseriesData() {
 
     windows, err := adm.processWindows()
     if err != nil {
-        log.Println("processTimeseriesData: unable to retrieve windows, timeseries data cannot be processed")
+        log.Println("processTimeseriesData: unable to retrieve windows, processing timeseries data cannot continue")
         return
     }
 
@@ -273,7 +273,7 @@ func (adm *ADMManager) processTimeseriesData() {
                 wg.Add(1)
 
                 adm.workers.acquire()
-                go func(dest string, slotsToWrite []*TimeSlot) {
+                go func(dest string, slotsToWrite []*TimeSlot, wg *sync.WaitGroup) {
                     defer adm.workers.release()
                     defer wg.Done()
 
@@ -287,29 +287,29 @@ func (adm *ADMManager) processTimeseriesData() {
 
                         adm.workers.acquire()
                         adm.openIO.acquire()
-                        go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple) {
+                        go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
                             defer adm.workers.release()
                             defer adm.openIO.release()
-                            defer innerWg.Done()
+                            defer wg.Done()
                             err := adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
                             if err != nil {
                                 log.Println(err)
                                 errored = true
                             }
-                        }(slotsToWrite, dataChan)
+                        }(slotsToWrite, dataChan, &innerWg)
 
                         adm.workers.acquire()
                         adm.openIO.acquire()
-                        go func(dest string, dataChan chan *TimeseriesTuple) {
+                        go func(dest string, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
                             defer adm.workers.release()
                             defer adm.openIO.release()
-                            defer innerWg.Done()
+                            defer wg.Done()
                             err := adm.writer.writeTimeseriesData(dest, dataChan)
                             if err != nil {
                                 log.Println(err)
                                 errored = true
                             }
-                        }(dest, dataChan)
+                        }(dest, dataChan, &innerWg)
 
                         innerWg.Wait()
 
@@ -326,9 +326,10 @@ func (adm *ADMManager) processTimeseriesData() {
 
                     if !finished {
                         log.Println("processTimeseriesData: maximum attempts exceeded for batch")
+                        os.Remove(dest)
                         anyError = true
                     }
-                }(dest(), slotsToWrite)
+                }(dest(), slotsToWrite, &wg)
 
                 currentSize = timeSlot.Count
                 slotsToWrite = make([]*TimeSlot, 0)
@@ -354,10 +355,14 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
 
     //2. number of uuids / min free resources = number of uuids per routine
     length := len(adm.uuids)
+    // windows = make([]*Window, len(adm.uuids))
     numUuidsPerRoutine := len(adm.uuids) / minFreeResources
     //3. each routine runs adm.reader.readWindows on a fixed range
     var wg sync.WaitGroup
     errored := false
+
+    //test
+    windowSliceChan := make(chan []*Window, length)
     for i := 0; i < length; i += numUuidsPerRoutine {
         end := i + numUuidsPerRoutine
 
@@ -368,7 +373,7 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
         adm.workers.acquire()
         adm.openIO.acquire()
         wg.Add(1)
-        go func(start int, end int, windows []*Window) {
+        go func(start int, end int, windows []*Window, wg *sync.WaitGroup) {
             defer adm.workers.release()
             defer adm.openIO.release()
             defer wg.Done()
@@ -388,20 +393,35 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
             }
 
             if finished {
-                fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
-                for i, window := range windowSlice {
-                    fmt.Println(start, i)
-                    windows[start + i] = window
-                }
+                // fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
+                // for i, _ := range windowSlice {
+                    // fmt.Println(start, i, end, len(windowSlice), len(windows))
+                    // windows[start + i] = window
+                    // fmt.Println("putting window in chan")
+                    // windowSliceChan <- windowSlice //TODO: Blocks for some reason
+                    // fmt.Println("put window in chan")
+                // }
+                fmt.Println("putting window in chan")
+                fmt.Println("size of windowSlice before this write:", len(windowSlice), len(windowSliceChan), len(adm.uuids))
+                windowSliceChan <- windowSlice //TODO: Blocks for some reason
+                fmt.Println("put window in chan")
             } else {
                 errored = true
             }
-        }(i, end, windows)
+        }(i, end, windows, &wg)
 
         fmt.Println("processWindows: Go routine created.", i, end)
     }
-    fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
+    fmt.Println("loop finished")
     wg.Wait()
+    close(windowSliceChan)
+    for windowSlice := range windowSliceChan {
+        fmt.Println("appending windows")
+        windows = append(windows, windowSlice...)
+    }
+    fmt.Println("All windows added:", len(windows), len(adm.uuids))
+
+    fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
 
     if errored {
         return nil, fmt.Errorf("processWindows: failed to process windows")
@@ -409,12 +429,28 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
     return windows, nil
 }
 
+func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) {
+    for _, uuid := range uuids {
+        windows = append(windows, adm.generateDummyWindow(uuid))
+    }
+    return
+}
+
+func (adm *ADMManager) generateDummyWindow(uuid string) *Window {
+    readings := make([][]float64, 1)
+    readings[0] = []float64{0, FileSize, 0, 0}
+    return &Window {
+        Uuid: uuid,
+        Readings: readings,
+    }
+}
+
 func (adm *ADMManager) getTimeseriesDest() func() string {
     fileCount := 0
     return func() string {
         switch adm.writeMode {
             case WM_FILE:
-                dest := TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
+                dest := DataFolder + TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
                 fileCount++
                 return dest
             case WM_NETWORK:
@@ -436,18 +472,18 @@ func (adm *ADMManager) run() {
         wg.Add(2)
 
         adm.workers.acquire()
-        go func() {
+        go func(wg *sync.WaitGroup) {
             defer adm.workers.release()
             defer wg.Done()
             adm.processMetadata()
-        }()
+        }(&wg)
 
         adm.workers.acquire()
-        go func() {
+        go func(wg *sync.WaitGroup) {
             defer adm.workers.release()
             defer wg.Done()
             adm.processTimeseriesData()
-        }()
+        }(&wg)
         fmt.Println("run: Waiting")
         wg.Wait()
 

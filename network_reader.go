@@ -54,7 +54,15 @@ func (r *NetworkReader) readWindows(src string, uuids []string) (windows []*Wind
             } else {
                 windows = append(windows, newWindows...)
             }
-            fmt.Println("readWindows: length of uuidsToBatch | newWindows:", len(uuidsToBatch), len(newWindows))
+            // fmt.Println("readWindows: length of uuidsToBatch | newWindows:", len(uuidsToBatch), len(newWindows))
+            // if len(uuidsToBatch) != len(newWindows) {
+            //     fmt.Println("\nreadWindows: len mismatch, uuidsToBatch", len(uuidsToBatch), len(newWindows))
+            //     fmt.Println(uuidsToBatch)
+            //     for _, win := range newWindows {
+            //         fmt.Println("window:", win.Uuid, length)
+            //     }
+            // }
+            
             windows = append(windows, newWindows...)
             uuidsToBatch = make([]string, 0)
         }
@@ -64,7 +72,7 @@ func (r *NetworkReader) readWindows(src string, uuids []string) (windows []*Wind
 }
 
 func (r *NetworkReader) readWindowsBatched(src string, uuids []string) (windows []*Window, err error) {
-    fmt.Println("readWindowsBatched: batching", len(uuids), "windows", uuids)
+    // fmt.Println("readWindowsBatched: batching", len(uuids), "windows", uuids)
     // windows := make([]*Window, 0)
     query := "select window(365d) data in (0, now) where uuid ="
 
@@ -74,6 +82,12 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) (windows 
         return nil, fmt.Errorf("readWindowsBatched: query failed for uuids:", uuids, "err:", err)
     }
     err = json.Unmarshal(body, &windows)
+
+    // if (len(windows) != len(uuids)) {
+    //     fmt.Println("len mismatch query:")
+    //     fmt.Println(query)
+    // }
+
     if err != nil {
         // log.Println("readWindowsBatched: batch window read failed for query:", query, "\n reason:", string(body))
         return nil, fmt.Errorf("readWindowsBatched: could not unmarshal uuids:", uuids, "err:", err)
