@@ -202,11 +202,19 @@ func (r *NetworkReader) readSingleMetadata(src string, uuid string) (body []byte
 }
 
 func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) (err error) {
+    log.Println("readTimeseriesData: starting read")
     for _, slot := range slots {
         startTime := strconv.FormatInt(slot.StartTime, 10)
         endTime := strconv.FormatInt(slot.EndTime, 10)
+
+        if endTime == "-1" {
+            endTime = "now"
+        }
+
+        log.Println("readTimeseriesData: making query for uuid", slot.Uuid)
         query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"
         body, err := r.makeQuery(src, query)
+        log.Println("readTimeseriesData: query complete for uuid", slot.Uuid)
         
         if err != nil {
             log.Println("readTimeseriesData: query failed for uuid:", slot.Uuid, "err:", err)
@@ -219,11 +227,15 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
             log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "query:", query, "err:", err)
             // return fmt.Errorf("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
         } else {
+            log.Println("readTimeseriesData: inserting uuid", slot.Uuid, "into channel")
             dataChan <- r.makeTimeseriesTuple(slot, body)
+            log.Println("readTimeseriesData: insert complete for uuid", slot.Uuid, "into channel")            
         }
+        log.Println("readTimeseriesData: read uuid", slot.Uuid)
     }
     close(dataChan)
-    return nil
+    log.Println("readTimeseriesData: finished read")
+    return nil //not a great solution, perhaps revisit with different types of errors
 }
 
 func (r *NetworkReader) readSingleTimeseriesData(src string, slot *TimeSlot) (body []byte, err error) {

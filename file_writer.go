@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	// "log"
+	"log"
 	"os"
 )
 
@@ -100,6 +100,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	first := true
 	wrote := false
 	for tuple := range dataChan {
+		log.Println("writeTimeseriesData: write start for uuid", tuple.slot.Uuid, "to dest", dest)
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
@@ -114,6 +115,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 			return fmt.Errorf("writeTimeseriesData: could not write slot:", tuple.slot, "to timeseries data file:", dest, "err:", err)
 		}
 		wrote = true
+		log.Println("writeTimeseriesData: write complete for uuid", tuple.slot.Uuid, "to dest", dest)
 	}
 
 	if wrote {

@@ -11,7 +11,7 @@ package main
 import (
     "fmt"
     "log"
-    // "runtime"
+    "runtime"
     "os"
     "strconv"
     "sync"
@@ -24,7 +24,7 @@ const (
     DataFolder = "data/"
     TimeseriesFolder = "timeseries/"
     UuidDestination = "uuids.txt"
-    MetadataDestination = "metadata1.txt"
+    MetadataDestination = "metadata.txt"
     TimeseriesDestination = "nil"
     FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
@@ -33,6 +33,7 @@ const (
     TryAgainInterval = 3
     ReaderType = RM_NETWORK
     WriterType = WM_FILE
+    ChannelBuffer = 10
 )
 
 type ReadMode uint8
@@ -161,7 +162,7 @@ func (adm *ADMManager) processMetadata() {
         for !finished && attempts < MaxTries {
             var innerWg sync.WaitGroup
             innerWg.Add(2)
-            dataChan := make(chan *MetadataTuple)
+            dataChan := make(chan *MetadataTuple, ChannelBuffer)
 
             adm.workers.acquire()
             adm.openIO.acquire()
@@ -212,6 +213,7 @@ func (adm *ADMManager) processMetadata() {
     }(&wg)
 
     wg.Wait()
+    log.Println("processMetadata: completed")
 }
 
 func (adm *ADMManager) getMetadataDest() func() string {
@@ -235,11 +237,16 @@ func (adm *ADMManager) processTimeseriesData() {
 
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
-    windows, err := adm.processWindows()
-    if err != nil {
-        log.Println("processTimeseriesData: unable to retrieve windows, processing timeseries data cannot continue")
-        return
-    }
+    windows := adm.generateDummyWindows(adm.uuids)
+    log.Println("timeseries uuids:", adm.uuids)
+    log.Println(windows[4])
+    windows = append(windows, adm.generateDummyWindow("final")) //to ensure final timeslot is processed
+
+    // windows, err := adm.processWindows()
+    // if err != nil {
+    //     log.Println("processTimeseriesData: unable to retrieve windows err:", err)
+    //     return
+    // }
 
     var wg sync.WaitGroup
     dest := adm.getTimeseriesDest()
@@ -248,14 +255,16 @@ func (adm *ADMManager) processTimeseriesData() {
     anyError := false
     fmt.Println("processTimeseriesData: got windows")
     for _, window := range windows { //each window represents one uuid
-
+        log.Println("window:", window.Uuid)
         if window == nil {
+            log.Println("window nil")
             continue
         }
 
         var timeSlots []*TimeSlot
         timeSlots = window.getTimeSlots()
         if (len(timeSlots) == 0) {
+            log.Println("processTimeseriesData: no slots for", window.Uuid)
             continue
         }
 
@@ -264,12 +273,13 @@ func (adm *ADMManager) processTimeseriesData() {
                 continue
             } else if timeSlot.Count == 0 {
                 adm.log.updateUuidTimeseriesStatus(timeSlot, WRITE_COMPLETE)
+                log.Println(timeSlot.Uuid, "already finished")
                 continue
             }
 
             currentSize += timeSlot.Count
 
-            if currentSize >= FileSize { //convert to memory size check later
+            if currentSize >= FileSize && len(slotsToWrite) > 0 { //convert to memory size check later
                 wg.Add(1)
 
                 adm.workers.acquire()
@@ -283,32 +293,38 @@ func (adm *ADMManager) processTimeseriesData() {
                     for !finished && attempts < MaxTries {
                         var innerWg sync.WaitGroup
                         innerWg.Add(2)
-                        dataChan := make(chan *TimeseriesTuple)
+                        dataChan := make(chan *TimeseriesTuple, ChannelBuffer)
 
                         adm.workers.acquire()
                         adm.openIO.acquire()
+                        log.Println("timeseries read resources acquired")
                         go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
                             defer adm.workers.release()
                             defer adm.openIO.release()
                             defer wg.Done()
+                            log.Println("timeseries read starting", slotsToWrite, len(slotsToWrite))
                             err := adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
                             if err != nil {
                                 log.Println(err)
                                 errored = true
                             }
+                            log.Println("timeseries read, resources released")
                         }(slotsToWrite, dataChan, &innerWg)
 
                         adm.workers.acquire()
                         adm.openIO.acquire()
+                        log.Println("timeseries write resources acquired")
                         go func(dest string, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
                             defer adm.workers.release()
                             defer adm.openIO.release()
                             defer wg.Done()
+                            log.Println("timeseries write starting", dest)
                             err := adm.writer.writeTimeseriesData(dest, dataChan)
                             if err != nil {
                                 log.Println(err)
                                 errored = true
                             }
+                            log.Println("timeseries written, resources released")
                         }(dest, dataChan, &innerWg)
 
                         innerWg.Wait()
@@ -524,8 +540,8 @@ func main() {
     go func() {
         for {
             time.Sleep(2 * time.Second)
-            // log.Println("Number of go routines:", runtime.NumGoroutine())
-            // log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
+            log.Println("Number of go routines:", runtime.NumGoroutine())
+            log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
         }
     }()
 
