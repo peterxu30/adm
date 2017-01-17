@@ -50,7 +50,9 @@ func (r *NetworkReader) readWindows(src string, uuids []string) (windows []*Wind
             newWindows, err := r.readWindowsBatched(src, uuidsToBatch)
             if err != nil {
                 // return nil, errors.New("readWindows: err:", err)
+                // return nil, fmt.Errorf("readWindows: err:", err)
                 log.Println("readWindows: err:", err)
+                //if err, go through serially and identify the failing one
             } else {
                 windows = append(windows, newWindows...)
             }
@@ -62,12 +64,12 @@ func (r *NetworkReader) readWindows(src string, uuids []string) (windows []*Wind
             //         fmt.Println("window:", win.Uuid, length)
             //     }
             // }
-            
+
             windows = append(windows, newWindows...)
             uuidsToBatch = make([]string, 0)
         }
     }
-
+    fmt.Println("readWindows len of uuids:", len(uuids), "len of windows:", len(windows))
     return
 }
 
@@ -79,6 +81,7 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) (windows 
     query = r.composeBatchQuery(query, uuids)
     body, err := r.makeQuery(src, query)
     if err != nil {
+        // log.Println("readWindowsBatched: query failed for uuids:", uuids, "query:", query, "err:", err)
         return nil, fmt.Errorf("readWindowsBatched: query failed for uuids:", uuids, "err:", err)
     }
     err = json.Unmarshal(body, &windows)
@@ -89,8 +92,18 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) (windows 
     // }
 
     if err != nil {
-        // log.Println("readWindowsBatched: batch window read failed for query:", query, "\n reason:", string(body))
-        return nil, fmt.Errorf("readWindowsBatched: could not unmarshal uuids:", uuids, "err:", err)
+        log.Println("readWindowsBatched: batch window read failed for uuids:", uuids, "query", query, "response:", string(body))
+        // return nil, fmt.Errorf("readWindowsBatched: could not unmarshal uuids:", uuids, "err:", err)
+        windows = make([]*Window, 0)
+        for _, uuid := range uuids {
+            window, err := r.readWindow(src, uuid)
+            if err != nil {
+                log.Println("readWindowsBatched: bad uuid", uuid)
+            } else {
+                windows = append(windows, window)
+            }
+        }
+        return windows, nil
     }
 
     return
@@ -155,10 +168,35 @@ func (r *NetworkReader) readMetadataBatched(src string, uuids []string, dataChan
         var metadata []*Metadata
         err = json.Unmarshal(body, &metadata)
         if err != nil {
-            return fmt.Errorf("readMetadataBatched: could not unmarshal uuids:", uuids, "err:", err)
+            // return fmt.Errorf("readMetadataBatched: could not unmarshal uuids:", uuids, "err:", err)
+            log.Println("readMetadataBatched: could not unmarshal uuids:", uuids, "err:", err)
+            for _, uuid := range uuids {
+                responseBody, err := r.readSingleMetadata(src, uuid)
+                if err != nil {
+                    log.Println("readMetadataBatched: bad uuid", uuid)
+                } else {
+                    dataChan <- r.makeMetadataTuple([]string{uuid}, responseBody)
+                }
+            }
+            return nil
+        } else {
+            dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
         }
-        
-        dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
+    }
+    return
+}
+
+func (r *NetworkReader) readSingleMetadata(src string, uuid string) (body []byte, err error) {
+    query := "select * where uuid =" + uuid
+    body, err = r.makeQuery(src, query)
+    if err != nil {
+        return nil, fmt.Errorf("readSingleMetadata: query failed for uuid:", uuid, "err:", err)
+    }
+
+    var metadata []*Metadata
+    err = json.Unmarshal(body, &metadata)
+    if err != nil {
+        return nil, fmt.Errorf("readSingleMetadata: could not unmarshal uuid:", uuid, "err:", err)
     }
     return
 }
@@ -178,13 +216,30 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
         var timeseries []*TimeseriesData
         err = json.Unmarshal(body, &timeseries)
         if err != nil {
-            // log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
-            return fmt.Errorf("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
+            log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "query:", query, "err:", err)
+            // return fmt.Errorf("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "err:", err)
+        } else {
+            dataChan <- r.makeTimeseriesTuple(slot, body)
         }
-
-        dataChan <- r.makeTimeseriesTuple(slot, body)
     }
     close(dataChan)
+    return nil
+}
+
+func (r *NetworkReader) readSingleTimeseriesData(src string, slot *TimeSlot) (body []byte, err error) {
+    startTime := strconv.FormatInt(slot.StartTime, 10)
+    endTime := strconv.FormatInt(slot.EndTime, 10)
+    query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"
+    body, err = r.makeQuery(src, query)
+    if err != nil {
+        return nil, fmt.Errorf("readSingleTimeseriesData: query failed for uuid:", slot.Uuid, "err:", err)
+    }
+
+    var timeseries []*TimeseriesData
+    err = json.Unmarshal(body, &timeseries)
+    if err != nil {
+        return nil, fmt.Errorf("readSingleTimeseriesData: could not unmarshal uuid:", slot.Uuid, "err:", err)
+    }
     return
 }
 

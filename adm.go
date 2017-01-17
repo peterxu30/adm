@@ -11,7 +11,7 @@ package main
 import (
     "fmt"
     "log"
-    "runtime"
+    // "runtime"
     "os"
     "strconv"
     "sync"
@@ -362,7 +362,7 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
     errored := false
 
     //test
-    windowSliceChan := make(chan []*Window, length)
+    windowChan := make(chan *Window, length)
     for i := 0; i < length; i += numUuidsPerRoutine {
         end := i + numUuidsPerRoutine
 
@@ -394,17 +394,20 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
 
             if finished {
                 // fmt.Println("processWindows:", start, end, adm.uuids[start:end], windowSlice)
-                // for i, _ := range windowSlice {
-                    // fmt.Println(start, i, end, len(windowSlice), len(windows))
-                    // windows[start + i] = window
-                    // fmt.Println("putting window in chan")
-                    // windowSliceChan <- windowSlice //TODO: Blocks for some reason
-                    // fmt.Println("put window in chan")
-                // }
                 fmt.Println("putting window in chan")
-                fmt.Println("size of windowSlice before this write:", len(windowSlice), len(windowSliceChan), len(adm.uuids))
-                windowSliceChan <- windowSlice //TODO: Blocks for some reason
-                fmt.Println("put window in chan")
+                // for i, window := range windowSlice {
+                for i := 0; i < end - start; i++ {
+                    window := windowSlice[i]
+                    fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
+                    // windows[start + i] = window
+                    fmt.Println("putting window in chan", start, end, len(windowSlice))
+                    windowChan <- window
+                    fmt.Println("put window in chan. curr len:", len(windowChan), length)
+                }
+                // fmt.Println("putting window in chan")
+                // fmt.Println("size of windowSlice before this write:", len(windowSlice), len(windowSliceChan), len(adm.uuids))
+                // windowSliceChan <- windowSlice //TODO: Blocks for some reason
+                fmt.Println("put windows in chan")
             } else {
                 errored = true
             }
@@ -414,10 +417,10 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
     }
     fmt.Println("loop finished")
     wg.Wait()
-    close(windowSliceChan)
-    for windowSlice := range windowSliceChan {
+    close(windowChan)
+    for window := range windowChan {
         fmt.Println("appending windows")
-        windows = append(windows, windowSlice...)
+        windows = append(windows, window)
     }
     fmt.Println("All windows added:", len(windows), len(adm.uuids))
 
@@ -521,10 +524,24 @@ func main() {
     go func() {
         for {
             time.Sleep(2 * time.Second)
-            log.Println("Number of go routines:", runtime.NumGoroutine())
-            log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
+            // log.Println("Number of go routines:", runtime.NumGoroutine())
+            // log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
         }
     }()
+
+    os.Mkdir("dev/", os.ModePerm)
+    outFile, err := os.Create("dev/stdout")
+    if err == nil {
+        os.Stdout = outFile
+    }
+    fmt.Println("Stdout initialized.")
+
+    logFile, err := os.Create("dev/log")
+    if err == nil {
+        log.SetOutput(logFile)
+    }
+    log.Println("Log initialized.")
+
     adm.run()
 
     //testing
