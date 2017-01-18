@@ -240,7 +240,7 @@ func (adm *ADMManager) processTimeseriesData() {
     windows := adm.generateDummyWindows(adm.uuids)
     log.Println("timeseries uuids:", adm.uuids)
     log.Println(windows[4])
-    windows = append(windows, adm.generateDummyWindow("final")) //to ensure final timeslot is processed
+    windows = append(windows, adm.generateDummyWindow("final", FileSize)) //to ensure final timeslot is processed
 
     // windows, err := adm.processWindows()
     // if err != nil {
@@ -450,14 +450,14 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
 
 func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) {
     for _, uuid := range uuids {
-        windows = append(windows, adm.generateDummyWindow(uuid))
+        windows = append(windows, adm.generateDummyWindow(uuid, FileSize))
     }
     return
 }
 
-func (adm *ADMManager) generateDummyWindow(uuid string) *Window {
+func (adm *ADMManager) generateDummyWindow(uuid string, fileSize int) *Window {
     readings := make([][]float64, 1)
-    readings[0] = []float64{0, FileSize, 0, 0}
+    readings[0] = []float64{0, float64(fileSize), 0, 0}
     return &Window {
         Uuid: uuid,
         Readings: readings,
