@@ -17,46 +17,45 @@ func newFileWriter() *FileWriter {
 	return &FileWriter{}
 }
 
-func (w *FileWriter) writeUuids(dest string, uuids []string) (err error) {
+func (w *FileWriter) writeUuids(dest string, uuids []string) *ProcessError {
 	body, err := json.Marshal(uuids)
 	if err != nil {
 		// log.Println("writeUuids: could not marshal uuids \n reason:", err)
-		err = fmt.Errorf("writeUuids: could not marshal uuids:", uuids, "err:", err) //TODO: HANDLE ERRORS LIKE THIS
-		return
+		return newProcessError(fmt.Sprint("writeUuids: could not marshal uuids:", uuids, "err:", err), true, nil)
 	}
 
 	err = ioutil.WriteFile(dest, body, 0644)
 	if err != nil {
 		// log.Println("writeUuids: could not write uuids. err:", err)
-		err = fmt.Errorf("writeUuids: could not write uuids:", uuids, "err:", err)
-		return
+		return newProcessError(fmt.Sprint("writeUuids: could not write uuids:", uuids, "err:", err), true, nil)
 	}
 
-	return
+	return nil
 }
 
-func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (err error) {
+func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *ProcessError {
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
 	    	// log.Println("writeMetadata: could not create metadata file. err:", err)
-	    	return fmt.Errorf("writeMetadata: could not create metadata file:", dest, "err:", err)
+	    	return newProcessError(fmt.Sprint("writeMetadata: could not create metadata file:", dest, "err:", err), true, nil)
 	    }
 	}
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		// log.Println("writeMetadata: could not open metadata file. err:", err)
-		return fmt.Errorf("writeMetadata: could not open metadata file:", dest, "err:", err)
+		return newProcessError(fmt.Sprint("writeMetadata: could not open metadata file:", dest, "err:", err), true, nil)
 	}
 
 	first := true
 	wrote := false
+	failed := make([]interface{}, 0)
 	for tuple := range dataChan {
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
-				return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
+				return newProcessError(fmt.Sprint("writeMetadata: failed to write err:", err), true, nil)
 			}
 		} else {
 			first = false
@@ -64,7 +63,10 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (e
 
 		_, err := f.Write(tuple.data)
 		if err != nil {
-			return fmt.Errorf("writeMetadata: could not write uuids:", tuple.uuids, "to metadata file:", dest, "err:", err)
+			log.Println("writeMetadata: failed to write uuid:", tuple.uuids)
+			for _, uuid := range tuple.uuids {
+				failed = append(failed, uuid)
+			}
 		}
 		wrote = true
 	}
@@ -72,39 +74,45 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) (e
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
+			// return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
+			return newProcessError(fmt.Sprint("writeMetadata: could not write metadata file:", dest, "err:", err), true, nil)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		// return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		return newProcessError(fmt.Sprint("writeMetadata: could not close metadata file:", dest, "err:", err), true, nil)
 	}
 
-	return
+	if len(failed) > 0 {
+		return newProcessError(fmt.Sprint("writeMetadata: failed to write uuids:", failed), false, failed)
+	}
+	return nil
 }
 
-func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) (err error) {
+func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) *ProcessError {
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
-			return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+			return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 	    }
 	}
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+		return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 	}
 
 	first := true
 	wrote := false
+	failed := make([]interface{}, 0)
 	for tuple := range dataChan {
-		log.Println("writeTimeseriesData: write start for uuid", tuple.slot.Uuid, "to dest", dest)
+		log.Println("writeTimeseriesData: write start for uuid", tuple.slot.Uuid, tuple.slot.StartTime, tuple.slot.EndTime, tuple.slot.Count, "to dest", dest)
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
-				return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+				return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 			}
 		} else {
 			first = false
@@ -112,25 +120,31 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 
 		_, err := f.Write(tuple.data)
 		if err != nil {
-			return fmt.Errorf("writeTimeseriesData: could not write slot:", tuple.slot, "to timeseries data file:", dest, "err:", err)
+			fmt.Println("writeTimeseriesData: could not write slot:", tuple.slot, tuple.slot.StartTime, tuple.slot.EndTime, "to timeseries data file:", dest, "err:", err)
+			failed = append(failed, tuple.slot)
 		}
 		wrote = true
-		log.Println("writeTimeseriesData: write complete for uuid", tuple.slot.Uuid, "to dest", dest)
+		log.Println("writeTimeseriesData: write complete for uuid", tuple.slot.Uuid, tuple.slot.StartTime, tuple.slot.EndTime, "to dest", dest)
 	}
 
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+			// return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+			return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		// return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		return newProcessError(fmt.Sprint("writeTimeseriesData: could not close timeseries data file:", dest, "err:", err), true, nil)
 	}
 
-	return
+	if len(failed) > 0 {
+		return newProcessError(fmt.Sprint("writeTimeseriesData: failed to write uuids:", failed), false, failed)
+	}
+	return nil
 }
 
 /*

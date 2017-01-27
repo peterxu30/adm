@@ -19,8 +19,8 @@ type TimeseriesTuple struct {
 }
 
 type Reader interface {
-    readUuids(src string) (uuids []string, err error) //relatively small size. can be accomplished without use of channels.
-    readWindows(src string, uuids []string) (windows []*Window, err error)
-    readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) (err error)
-    readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) (err error)
+    readUuids(src string) ([]string, *ProcessError) //relatively small size. can be accomplished without use of channels.
+    readWindows(src string, uuids []string) ([]*Window, *ProcessError)
+    readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) *ProcessError
+    readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) *ProcessError
 }

@@ -9,7 +9,7 @@ type TimeSlot struct {
     Uuid string
     StartTime int64
     EndTime int64
-    Count int
+    Count int64
 }
 
 func (window *Window) getTimeSlots() []*TimeSlot {
@@ -27,7 +27,7 @@ func (window *Window) getTimeSlots() []*TimeSlot {
             Uuid: window.Uuid,
             StartTime: startTime,
             EndTime: endTime,
-            Count: int(reading[1]),
+            Count: int64(reading[1]),
         }
         slots[i] = &slot
     }
