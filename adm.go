@@ -11,7 +11,7 @@ package main
 import (
     "fmt"
     "log"
-    // "runtime"
+    "runtime"
     "os"
     "strconv"
     "sync"
@@ -424,12 +424,10 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
             for i := 0; i < end - start; i++ {
                 window := windowSlice[i]
                 fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
-                // windows[start + i] = window
                 fmt.Println("putting window in chan", start, end, len(windowSlice))
                 windowChan <- window
                 fmt.Println("put window in chan. curr len:", len(windowChan), length)
             }
-            fmt.Println("put windows in chan")
         }(i, end, windows, &wg)
 
         fmt.Println("processWindows: Go routine created.", i, end)
@@ -441,8 +439,6 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
         windows = append(windows, window)
     }
     fmt.Println("All windows added:", len(windows), len(adm.uuids))
-
-    fmt.Println("processWindows:", windows, "WINDOWS FINISHED")
 
     return windows, nil
 }
@@ -507,27 +503,6 @@ func (adm *ADMManager) run() {
     fmt.Println("run: Waiting")
     wg.Wait()
     close(adm.errorChan)
-    // finished = adm.checkIfMetadataProcessed() && adm.checkIfTimeseriesProcessed()
-}
-
-func (adm *ADMManager) checkIfMetadataProcessed() bool {
-    keySet := adm.log.getUuidMetadataKeySet()
-    for _, key := range keySet {
-        if adm.log.getUuidMetadataStatus(key) != WRITE_COMPLETE {
-            return false
-        }
-    }
-    return true
-}
-
-func (adm *ADMManager) checkIfTimeseriesProcessed() bool {
-    keySet := adm.log.getUuidTimeseriesKeySet()
-    for _, key := range keySet {
-        if adm.log.getUuidTimeseriesStatus(key) != WRITE_COMPLETE {
-            return false
-        }
-    }
-    return true
 }
 
 func (adm *ADMManager) errorLogger(dest string, errorChan chan *ErrorLog) {
@@ -552,9 +527,9 @@ func main() {
     adm := newADMManager(Url, WorkerSize, OpenIO, RM_NETWORK, WM_FILE)
     go func() {
         for {
-            time.Sleep(2 * time.Second)
-            // log.Println("Number of go routines:", runtime.NumGoroutine())
-            // log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
+            time.Sleep(10 * time.Second)
+            log.Println("Number of go routines:", runtime.NumGoroutine())
+            log.Println("Number of workers:", adm.workers.count(), "Number of open IO:", adm.openIO.count())
         }
     }()
 
