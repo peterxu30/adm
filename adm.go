@@ -193,10 +193,6 @@ func (adm *ADMManager) processMetadata() {
                     errLog := newErrorLog(badUuid, MetadataError, 0, 0)
                     adm.errorChan <- errLog
                 }
-            } else {
-                if adm.writeMode == WM_FILE {
-                    os.Remove(dest)
-                }
             }
             errored = true
         }

@@ -1,4 +1,4 @@
-//delete the file on any error
+//deletes the file on a fatal write error
 
 package main
 
@@ -20,13 +20,12 @@ func newFileWriter() *FileWriter {
 func (w *FileWriter) writeUuids(dest string, uuids []string) *ProcessError {
 	body, err := json.Marshal(uuids)
 	if err != nil {
-		// log.Println("writeUuids: could not marshal uuids \n reason:", err)
 		return newProcessError(fmt.Sprint("writeUuids: could not marshal uuids:", uuids, "err:", err), true, nil)
 	}
 
 	err = ioutil.WriteFile(dest, body, 0644)
 	if err != nil {
-		// log.Println("writeUuids: could not write uuids. err:", err)
+		os.Remove(dest)
 		return newProcessError(fmt.Sprint("writeUuids: could not write uuids:", uuids, "err:", err), true, nil)
 	}
 
@@ -37,14 +36,13 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *P
 	if !w.fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
-	    	// log.Println("writeMetadata: could not create metadata file. err:", err)
 	    	return newProcessError(fmt.Sprint("writeMetadata: could not create metadata file:", dest, "err:", err), true, nil)
 	    }
 	}
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		// log.Println("writeMetadata: could not open metadata file. err:", err)
+		os.Remove(dest)
 		return newProcessError(fmt.Sprint("writeMetadata: could not open metadata file:", dest, "err:", err), true, nil)
 	}
 
@@ -55,6 +53,7 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *P
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
+				os.Remove(dest)
 				return newProcessError(fmt.Sprint("writeMetadata: failed to write err:", err), true, nil)
 			}
 		} else {
@@ -74,14 +73,14 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *P
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			// return fmt.Errorf("writeMetadata: could not write metadata file:", dest, "err:", err)
+			os.Remove(dest)
 			return newProcessError(fmt.Sprint("writeMetadata: could not write metadata file:", dest, "err:", err), true, nil)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		// return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		os.Remove(dest)
 		return newProcessError(fmt.Sprint("writeMetadata: could not close metadata file:", dest, "err:", err), true, nil)
 	}
 
@@ -101,6 +100,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 
 	f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
+		os.Remove(dest)
 		return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 	}
 
@@ -112,6 +112,7 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 		if !first {
 			_, err := f.Write([]byte(","))
 			if err != nil {
+				os.Remove(dest)
 				return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 			}
 		} else {
@@ -130,14 +131,14 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	if wrote {
 		_, err = f.Write([]byte("]"))
 		if err != nil {
-			// return fmt.Errorf("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err)
+			os.Remove(dest)
 			return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
 		}
 	}
 
 	err = f.Close()
 	if err != nil {
-		// return fmt.Errorf("writeMetadata: could not close metadata file:", dest, "err:", err)
+		os.Remove(dest)
 		return newProcessError(fmt.Sprint("writeTimeseriesData: could not close timeseries data file:", dest, "err:", err), true, nil)
 	}
 
