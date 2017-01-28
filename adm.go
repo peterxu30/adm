@@ -234,15 +234,18 @@ func (adm *ADMManager) processTimeseriesData() {
 
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
-    windows := adm.generateDummyWindows(adm.uuids[0:5])
-    log.Println("timeseries uuids:", adm.uuids[0:5])
-    log.Println(windows[4])
+    //DUMMY WINDOWS
+    // windows := adm.generateDummyWindows(adm.uuids[0:5])
+    // log.Println("timeseries uuids:", adm.uuids[0:5])
+    // log.Println(windows[4])
 
-    // windows, err := adm.processWindows()
-    // if err != nil {
-    //     log.Println("processTimeseriesData: unable to retrieve windows err:", err)
-    //     return
-    // }
+    //ACTUAL WINDOWS
+    windows := adm.processWindows()
+    if len(windows) == 0 {
+        log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
+        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
+    }
+
     windows = append(windows, adm.generateDummyWindow("final", FileSize)) //to ensure final timeslot is processed
 
     var wg sync.WaitGroup
@@ -297,7 +300,7 @@ func (adm *ADMManager) processTimeseriesData() {
                     defer adm.workers.release()
                     defer adm.openIO.release()
                     defer wg.Done()
-                    log.Println("timeseries read starting", slotsToWrite, len(slotsToWrite))
+                    log.Println("timeseries read starting. # slots:", len(slotsToWrite))
                     err := adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
                     if err != nil {
                         log.Println(err)
@@ -357,8 +360,8 @@ func (adm *ADMManager) processTimeseriesData() {
     }
 }
 
-//TODO: fix error handling
-func (adm *ADMManager) processWindows() (windows []*Window, err error) {
+func (adm *ADMManager) processWindows() []*Window {
+    var windows []*Window
     //1. Find minimum number free resources from workers and openIO
     minFreeWorkers := WorkerSize - adm.workers.count()
     minFreeOpenIO := OpenIO - adm.openIO.count()
@@ -397,8 +400,7 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
             var windowSlice []*Window
             
             fmt.Println("processWindows: Processing windows", start, end)
-            var err *ProcessError
-            windowSlice, err = adm.reader.readWindows(adm.url, adm.uuids[start:end])
+            windowSlice, err := adm.reader.readWindows(adm.url, adm.uuids[start:end])
             if err != nil {
                 log.Println(err)
                 if !err.Fatal() {
@@ -410,12 +412,15 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
                 }
             }
 
+            if len(windowSlice) != (end - start) {
+                log.Println("Window mismatch:", (end - start), "uuids produced", len(windowSlice), "windows")
+            }
+
             fmt.Println("putting window in chan")
             // for i, window := range windowSlice {
             for i := 0; i < end - start; i++ {
                 window := windowSlice[i]
                 fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
-                fmt.Println("putting window in chan", start, end, len(windowSlice))
                 windowChan <- window
                 fmt.Println("put window in chan. curr len:", len(windowChan), length)
             }
@@ -431,7 +436,7 @@ func (adm *ADMManager) processWindows() (windows []*Window, err error) {
     }
     fmt.Println("All windows added:", len(windows), len(adm.uuids))
 
-    return windows, nil
+    return windows
 }
 
 func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) {
@@ -466,6 +471,24 @@ func (adm *ADMManager) getTimeseriesDest() func() string {
     }
 }
 
+func (adm *ADMManager) errorLogger(dest string, errorChan chan *ErrorLog) {
+    os.Create(dest)
+    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
+
+    if err != nil {
+        log.Println("errorLogger: could not log bad data sources err:", err)
+    }
+
+    for errorLog := range errorChan {
+        f.Write([]byte(fmt.Sprint(errorLog.uuid, errorLog.errorType, errorLog.startTime, errorLog.endTime, "\n")))
+    }
+
+    err = f.Close()
+    if err != nil {
+        log.Println("errorLogger: could not close file")
+    }
+}
+
 func (adm *ADMManager) run() {
     adm.workers.acquire()
     go func() {
@@ -494,24 +517,6 @@ func (adm *ADMManager) run() {
     fmt.Println("run: Waiting")
     wg.Wait()
     close(adm.errorChan)
-}
-
-func (adm *ADMManager) errorLogger(dest string, errorChan chan *ErrorLog) {
-    os.Create(dest)
-    f, err := os.OpenFile(dest, os.O_APPEND|os.O_WRONLY, 0644)
-
-    if err != nil {
-        log.Println("errorLogger: could not log bad data sources err:", err)
-    }
-
-    for errorLog := range errorChan {
-        f.Write(errorLog.ToByteArray())
-    }
-
-    err = f.Close()
-    if err != nil {
-        log.Println("errorLogger: could not close file")
-    }
 }
 
 func main() {

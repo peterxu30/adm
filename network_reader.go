@@ -14,7 +14,7 @@ import (
 const (
     WindowBatchSize = 10
     MetadataBatchSize = 10
-    QueryTimeout = 30
+    QueryTimeout = 10
 )
 
 type NetworkReader struct{}
@@ -197,6 +197,7 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
 
         log.Println("readTimeseriesData: making query for uuid", slot.Uuid, slot.StartTime, slot.EndTime)
         query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"
+        log.Println("readTimeseriesData: query string:", query)
         body, err := r.makeQuery(src, query)
         log.Println("readTimeseriesData: query complete for uuid", slot.Uuid, slot.StartTime, slot.EndTime)
         
