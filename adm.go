@@ -332,11 +332,6 @@ func (adm *ADMManager) processTimeseriesData() {
                                 errLog := newErrorLog(badSlot.Uuid, TimeseriesError, badSlot.StartTime, badSlot.EndTime)
                                 adm.errorChan <- errLog
                             }
-                        } else {
-                            log.Println("processTimeseriesData: maximum attempts exceeded for batch")
-                            if adm.writeMode == WM_FILE {
-                                os.Remove(dest)
-                            }
                         }
                         errored = true
                     }
