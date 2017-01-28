@@ -185,11 +185,15 @@ func (adm *ADMManager) processMetadata() {
         fmt.Println("processMetadata: Starting to write metadata")
         err := adm.writer.writeMetadata(dest, dataChan)
 
+        badUuids := make(map[string]bool)
         if err != nil {
             log.Println(err)
             if !err.Fatal() {
                 for _, uuid := range err.Failed() {
                     badUuid := uuid.(string)
+
+                    badUuids[badUuid] = true
+
                     errLog := newErrorLog(badUuid, MetadataError, 0, 0)
                     adm.errorChan <- errLog
                 }
@@ -198,7 +202,9 @@ func (adm *ADMManager) processMetadata() {
         }
 
         for _, uuid := range adm.uuids {
-            adm.log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
+            if _, ok := badUuids[uuid]; !ok {
+                adm.log.updateUuidMetadataStatus(uuid, WRITE_COMPLETE)
+            }
         }
 
     }(dest(), &wg)
@@ -327,11 +333,15 @@ func (adm *ADMManager) processTimeseriesData() {
                     log.Println("timeseries write starting", dest)
                     err := adm.writer.writeTimeseriesData(dest, dataChan)
 
+                    badSlots := make(map[*TimeSlot]bool)
                     if err != nil {
                         log.Println(err)
                         if !err.Fatal() {
                             for _, slot := range err.Failed() {
                                 badSlot := slot.(*TimeSlot)
+
+                                badSlots[badSlot] = true
+
                                 errLog := newErrorLog(badSlot.Uuid, TimeseriesError, badSlot.StartTime, badSlot.EndTime)
                                 adm.errorChan <- errLog
                             }
@@ -340,7 +350,9 @@ func (adm *ADMManager) processTimeseriesData() {
                     }
 
                     for _, slot := range slotsToWrite {
-                        adm.log.updateUuidTimeseriesStatus(slot, WRITE_COMPLETE)
+                        if _, ok := badSlots[slot]; !ok {
+                            adm.log.updateUuidTimeseriesStatus(slot, WRITE_COMPLETE)
+                        }
                     }
 
                     log.Println("timeseries written, resources released")
