@@ -14,7 +14,7 @@ import (
 const (
     WindowBatchSize = 10
     MetadataBatchSize = 10
-    QueryTimeout = 10
+    QueryTimeout = 30
 )
 
 type NetworkReader struct{}

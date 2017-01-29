@@ -194,7 +194,7 @@ func (adm *ADMManager) processMetadata() {
 
                     badUuids[badUuid] = true
 
-                    errLog := newErrorLog(badUuid, MetadataError, 0, 0)
+                    errLog := newErrorLog(badUuid, METADATA_ERROR, 0, 0)
                     adm.errorChan <- errLog
                 }
             }
@@ -241,16 +241,16 @@ func (adm *ADMManager) processTimeseriesData() {
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
     //DUMMY WINDOWS
-    // windows := adm.generateDummyWindows(adm.uuids[0:5])
-    // log.Println("timeseries uuids:", adm.uuids[0:5])
-    // log.Println(windows[4])
+    windows := adm.generateDummyWindows(adm.uuids[0:5])
+    log.Println("timeseries uuids:", adm.uuids[0:5])
+    log.Println(windows[4])
 
     //ACTUAL WINDOWS
-    windows := adm.processWindows()
-    if len(windows) == 0 {
-        log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
-        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
-    }
+    // windows := adm.processWindows()
+    // if len(windows) == 0 {
+    //     log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
+    //     windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
+    // }
 
     windows = append(windows, adm.generateDummyWindow("final", FileSize)) //to ensure final timeslot is processed
 
@@ -313,7 +313,7 @@ func (adm *ADMManager) processTimeseriesData() {
                         if !err.Fatal() {
                             for _, slot := range err.Failed() {
                                 badSlot := slot.(*TimeSlot)
-                                errLog := newErrorLog(badSlot.Uuid, TimeseriesError, badSlot.StartTime, badSlot.EndTime)
+                                errLog := newErrorLog(badSlot.Uuid, TIMESERIES_ERROR, badSlot.StartTime, badSlot.EndTime)
                                 adm.errorChan <- errLog
                             }
                         }
@@ -342,7 +342,7 @@ func (adm *ADMManager) processTimeseriesData() {
 
                                 badSlots[badSlot] = true
 
-                                errLog := newErrorLog(badSlot.Uuid, TimeseriesError, badSlot.StartTime, badSlot.EndTime)
+                                errLog := newErrorLog(badSlot.Uuid, TIMESERIES_ERROR, badSlot.StartTime, badSlot.EndTime)
                                 adm.errorChan <- errLog
                             }
                         }
@@ -418,7 +418,7 @@ func (adm *ADMManager) processWindows() []*Window {
                 if !err.Fatal() {
                     for _, uuid := range err.Failed() {
                         badUuid := uuid.(string)
-                        errLog := newErrorLog(badUuid, WindowError, 0, 0)
+                        errLog := newErrorLog(badUuid, WINDOW_ERROR, 0, 0)
                         adm.errorChan <- errLog
                     }
                 }
@@ -492,7 +492,7 @@ func (adm *ADMManager) errorLogger(dest string, errorChan chan *ErrorLog) {
     }
 
     for errorLog := range errorChan {
-        f.Write([]byte(fmt.Sprint(errorLog.uuid, errorLog.errorType, errorLog.startTime, errorLog.endTime, "\n")))
+        f.Write([]byte(fmt.Sprint(errorLog.uuid, " ", errorLog.errorType, errorLog.startTime, errorLog.endTime, "\n")))
     }
 
     err = f.Close()
@@ -505,7 +505,7 @@ func (adm *ADMManager) run() {
     adm.workers.acquire()
     go func() {
         defer adm.workers.release()
-        adm.errorLogger("dev/data_src_error_log.txt", adm.errorChan)
+        adm.errorLogger("dev/data_src_error_log", adm.errorChan)
     }()
 
     adm.processUuids()
