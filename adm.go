@@ -150,19 +150,18 @@ func (adm *ADMManager) processMetadata() {
     }
 
     var wg sync.WaitGroup
+    wg.Add(2)
 
-    adm.workers.acquire()
     dataChan := make(chan *MetadataTuple, ChannelBuffer)
     errored := false
     dest := adm.getMetadataDest()
 
     adm.workers.acquire()
     adm.openIO.acquire()
-    wg.Add(1)
     go func(wg *sync.WaitGroup) {
+        defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
-        defer wg.Done()
         fmt.Println("processMetadata: Starting to read metadata")
         err := adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
 
@@ -170,6 +169,11 @@ func (adm *ADMManager) processMetadata() {
             log.Println(err)
             if !err.Fatal() {
                 //write the bad uuids to text
+                for _, uuid := range err.Failed() {
+                    badUuid := uuid.(string)
+                    errLog := newErrorLog(badUuid, METADATA_ERROR, 0, 0)
+                    adm.errorChan <- errLog
+                }
             }
             errored = true
         }
@@ -177,11 +181,10 @@ func (adm *ADMManager) processMetadata() {
 
     adm.workers.acquire()
     adm.openIO.acquire()
-    wg.Add(1)
     go func(dest string, wg *sync.WaitGroup) {
+        defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
-        defer wg.Done()
         fmt.Println("processMetadata: Starting to write metadata")
         err := adm.writer.writeMetadata(dest, dataChan)
 
@@ -241,16 +244,16 @@ func (adm *ADMManager) processTimeseriesData() {
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
     //DUMMY WINDOWS
-    windows := adm.generateDummyWindows(adm.uuids[0:5])
-    log.Println("timeseries uuids:", adm.uuids[0:5])
-    log.Println(windows[4])
+    // windows := adm.generateDummyWindows(adm.uuids[0:5])
+    // log.Println("timeseries uuids:", adm.uuids[0:5])
+    // log.Println(windows[4])
 
     //ACTUAL WINDOWS
-    // windows := adm.processWindows()
-    // if len(windows) == 0 {
-    //     log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
-    //     windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
-    // }
+    windows := adm.processWindows()
+    if len(windows) == 0 {
+        log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
+        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
+    }
 
     windows = append(windows, adm.generateDummyWindow("final", FileSize)) //to ensure final timeslot is processed
 
@@ -297,15 +300,15 @@ func (adm *ADMManager) processTimeseriesData() {
             if (currentSize >= FileSize) && len(slotsToWrite) > 0 { //convert to memory size check later
 
                 dataChan := make(chan *TimeseriesTuple, ChannelBuffer)
+                wg.Add(2)
 
                 adm.workers.acquire()
                 adm.openIO.acquire()
-                wg.Add(1)
                 log.Println("timeseries read resources acquired")
                 go func(slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
+                    defer wg.Done()
                     defer adm.workers.release()
                     defer adm.openIO.release()
-                    defer wg.Done()
                     log.Println("timeseries read starting. # slots:", len(slotsToWrite))
                     err := adm.reader.readTimeseriesData(adm.url, slotsToWrite, dataChan)
                     if err != nil {
@@ -324,12 +327,11 @@ func (adm *ADMManager) processTimeseriesData() {
 
                 adm.workers.acquire()
                 adm.openIO.acquire()
-                wg.Add(1)
                 log.Println("timeseries write resources acquired")
                 go func(dest string, slotsToWrite []*TimeSlot, dataChan chan *TimeseriesTuple, wg *sync.WaitGroup) {
+                    defer wg.Done()
                     defer adm.workers.release()
                     defer adm.openIO.release()
-                    defer wg.Done()
                     log.Println("timeseries write starting", dest)
                     err := adm.writer.writeTimeseriesData(dest, dataChan)
 
@@ -506,6 +508,7 @@ func (adm *ADMManager) run() {
     go func() {
         defer adm.workers.release()
         adm.errorLogger("dev/data_src_error_log", adm.errorChan)
+        log.Println("run: errors finished")
     }()
 
     adm.processUuids()
@@ -518,6 +521,7 @@ func (adm *ADMManager) run() {
         defer adm.workers.release()
         defer wg.Done()
         adm.processMetadata()
+        log.Println("run: metadata finished")
     }(&wg)
 
     adm.workers.acquire()
@@ -525,10 +529,11 @@ func (adm *ADMManager) run() {
         defer adm.workers.release()
         defer wg.Done()
         adm.processTimeseriesData()
+        log.Println("run: timeseries finished")
     }(&wg)
-    fmt.Println("run: Waiting")
     wg.Wait()
     close(adm.errorChan)
+    log.Println("run: adm finished")
 }
 
 func main() {
