@@ -109,17 +109,25 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 	failed := make([]interface{}, 0)
 	for tuple := range dataChan {
 		log.Println("writeTimeseriesData: write start for uuid", tuple.slot.Uuid, tuple.slot.StartTime, tuple.slot.EndTime, tuple.slot.Count, "to dest", dest)
+		// if !first {
+		// 	_, err := f.Write([]byte(","))
+		// 	if err != nil {
+		// 		os.Remove(dest)
+		// 		return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
+		// 	}
+		// } else {
+		// 	first = false
+		// }
+
+		data := tuple.data
 		if !first {
-			_, err := f.Write([]byte(","))
-			if err != nil {
-				os.Remove(dest)
-				return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
-			}
+			comma := []byte(",")
+			data = append(comma, data...)
 		} else {
 			first = false
 		}
 
-		_, err := f.Write(tuple.data)
+		_, err := f.Write(data)
 		if err != nil {
 			fmt.Println("writeTimeseriesData: could not write slot:", tuple.slot, tuple.slot.StartTime, tuple.slot.EndTime, "to timeseries data file:", dest, "err:", err)
 			failed = append(failed, tuple.slot)

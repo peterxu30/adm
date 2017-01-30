@@ -29,7 +29,6 @@ const (
     FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
     OpenIO = 15
-    TryAgainInterval = 3
     ReaderType = RM_NETWORK
     WriterType = WM_FILE
     ChannelBuffer = 10
@@ -63,6 +62,7 @@ type ADMManager struct {
 }
 
 func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, writeMode WriteMode) *ADMManager {
+// func newADMManager(admConfig *AdmConfig) *ADMManager {
     logger := newLogger()
 
     reader := configureReader(readMode)
