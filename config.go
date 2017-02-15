@@ -17,9 +17,9 @@ type AdmConfig struct {
 	UuidDest string `yaml:"uuidDest"`
 	MetadataDest string `yaml:"metadataDest"`
 	TimeseriesDest string `yaml:"timeseriesDest"`
-	ReadMode string `yaml:"readMode"`
-	WriteMode string `yaml:"writeMode"`
-	ChunkSize int `yaml:"chunkSize"`
+	ReadMode ReadMode `yaml:"readMode"`
+	WriteMode WriteMode `yaml:"writeMode"`
+	ChunkSize int64 `yaml:"chunkSize"`
 	ChannelBufferSize int `yaml:"channelBufferSize"`
 }
 
@@ -32,6 +32,8 @@ func newAdmConfig() (*AdmConfig, error) {
 	admConfig := AdmConfig{}
 	err = yaml.Unmarshal(configData, &admConfig)
 	fmt.Println(admConfig)
+	fmt.Println(admConfig.ReadMode, RM_GILES, RM_FILE)
+	fmt.Println(admConfig.WriteMode, WM_GILES, WM_FILE)
 	if err != nil {
 		return nil, err
 	}
@@ -46,4 +48,10 @@ func readConfigFile() ([]byte, error) {
 		return nil, err
 	}
 	return configData, nil
+}
+
+func createConfigFile() error {
+	body := []byte("sourceUrl:\nworkerSize:\nopenIO:\nuuidDest:\nmetadataDest:\ntimeseriesDest:\nreadMode:\nwriteMode:\nchunkSize:\nchannelBufferSize:")
+	err := ioutil.WriteFile(CONFIG_FILE, body, 0644)
+	return err
 }

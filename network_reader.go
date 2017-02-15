@@ -17,13 +17,13 @@ const (
     QueryTimeout = 30
 )
 
-type NetworkReader struct{}
+type GilesReader struct{}
 
-func newNetworkReader() *NetworkReader {
-    return &NetworkReader {}
+func newGilesReader() *GilesReader {
+    return &GilesReader {}
 }
 
-func (r *NetworkReader) readUuids(src string) ([]string, *ProcessError) {
+func (r *GilesReader) readUuids(src string) ([]string, *ProcessError) {
     var uuids []string
     body, err := r.makeQuery(src, "select distinct uuid")
     if err != nil {
@@ -38,7 +38,7 @@ func (r *NetworkReader) readUuids(src string) ([]string, *ProcessError) {
     return uuids, nil
 }
 
-func (r *NetworkReader) readWindows(src string, uuids []string) ([]*Window, *ProcessError) {
+func (r *GilesReader) readWindows(src string, uuids []string) ([]*Window, *ProcessError) {
     var windows []*Window
     fmt.Println("readWindows: read windows uuid length", len(uuids))
     uuidsToBatch := make([]string, 0)
@@ -78,13 +78,14 @@ func (r *NetworkReader) readWindows(src string, uuids []string) ([]*Window, *Pro
     return windows, nil
 }
 
-func (r *NetworkReader) readWindowsBatched(src string, uuids []string) ([]*Window, error) {
+func (r *GilesReader) readWindowsBatched(src string, uuids []string) ([]*Window, error) {
     var windows []*Window
     query := "select window(365d) data in (0, now) where uuid ="
 
     query = r.composeBatchQuery(query, uuids)
     body, err := r.makeQuery(src, query)
     if err != nil {
+        fmt.Println("bad query string:", query)
         return nil, fmt.Errorf("readWindowsBatched: query failed for uuids:", uuids, "err:", err)
     }
     err = json.Unmarshal(body, &windows)
@@ -96,7 +97,7 @@ func (r *NetworkReader) readWindowsBatched(src string, uuids []string) ([]*Windo
     return windows, nil
 }
 
-func (r *NetworkReader) readWindow(src string, uuid string) (*Window, error) {
+func (r *GilesReader) readWindow(src string, uuid string) (*Window, error) {
     var window *Window
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
     body, err := r.makeQuery(src, query)
@@ -114,7 +115,7 @@ func (r *NetworkReader) readWindow(src string, uuid string) (*Window, error) {
     return window, nil
 }
 
-func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) *ProcessError {
+func (r *GilesReader) readMetadata(src string, uuids []string, dataChan chan *MetadataTuple) *ProcessError {
     uuidsToBatch := make([]string, 0)
     length := len(uuids)
     failed := make([]interface{}, 0)
@@ -125,7 +126,7 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
             body, err := r.readMetadataBatched(src, uuidsToBatch)
             
             if err != nil {
-                log.Println("readMetadataBatched: could not unmarshal uuids:", uuids, "err:", err)
+                log.Println("readMetadataBatched: could not unmarshal uuids:", uuidsToBatch, "err:", err)
                 for _, uuid := range uuids {
                     singleBody, err := r.readSingleMetadata(src, uuid)
                     if err != nil {
@@ -151,12 +152,13 @@ func (r *NetworkReader) readMetadata(src string, uuids []string, dataChan chan *
 }
 
 //helper function
-func (r *NetworkReader) readMetadataBatched(src string, uuids []string) ([]byte, error) {
+func (r *GilesReader) readMetadataBatched(src string, uuids []string) ([]byte, error) {
     query := "select * where uuid ="
 
     query = r.composeBatchQuery(query, uuids)
     body, err := r.makeQuery(src, query)
     if err != nil {
+        fmt.Println("bad query string:", query)
         return nil, fmt.Errorf("readMetadataBatched: query failed for uuids:", uuids, "err:", err)
     }
 
@@ -170,7 +172,7 @@ func (r *NetworkReader) readMetadataBatched(src string, uuids []string) ([]byte,
 }
 
 //helper function
-func (r *NetworkReader) readSingleMetadata(src string, uuid string) ([]byte, error) {
+func (r *GilesReader) readSingleMetadata(src string, uuid string) ([]byte, error) {
     query := "select * where uuid =" + uuid
     body, err := r.makeQuery(src, query)
     if err != nil {
@@ -185,7 +187,7 @@ func (r *NetworkReader) readSingleMetadata(src string, uuid string) ([]byte, err
     return body, nil
 }
 
-func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) (*ProcessError) {
+func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan chan *TimeseriesTuple) (*ProcessError) {
     failed := make([]interface{}, 0)
     for _, slot := range slots {
         startTime := strconv.FormatInt(slot.StartTime, 10) + "ns"
@@ -202,6 +204,7 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
         log.Println("readTimeseriesData: query complete for uuid", slot.Uuid, slot.StartTime, slot.EndTime)
         
         if err != nil {
+            fmt.Println("bad query string:", query)
             log.Println("readTimeseriesData: query failed for uuid:", slot.Uuid, "err:", err)
             failed = append(failed, slot)
             continue
@@ -235,7 +238,7 @@ func (r *NetworkReader) readTimeseriesData(src string, slots []*TimeSlot, dataCh
  * Return value is of type []byte. It is up to the calling function to convert
  * []byte into the appropriate type.
  */
-func (r *NetworkReader) makeQuery(url string, queryString string) (body []byte, err error) {
+func (r *GilesReader) makeQuery(url string, queryString string) (body []byte, err error) {
     query := []byte(queryString)
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
     if err != nil {
@@ -259,7 +262,7 @@ func (r *NetworkReader) makeQuery(url string, queryString string) (body []byte, 
     return
 }
 
-func (r *NetworkReader) composeBatchQuery(query string, uuids []string) string {
+func (r *GilesReader) composeBatchQuery(query string, uuids []string) string {
     first := true
     for _, uuid := range uuids {
         if !first {
@@ -272,14 +275,14 @@ func (r *NetworkReader) composeBatchQuery(query string, uuids []string) string {
     return query
 }
 
-func (r *NetworkReader) makeMetadataTuple(uuids []string, data []byte) *MetadataTuple {
+func (r *GilesReader) makeMetadataTuple(uuids []string, data []byte) *MetadataTuple {
     return &MetadataTuple {
         uuids: uuids,
         data: data,
     }
 }
 
-func (r *NetworkReader) makeTimeseriesTuple(slot *TimeSlot, data []byte) *TimeseriesTuple {
+func (r *GilesReader) makeTimeseriesTuple(slot *TimeSlot, data []byte) *TimeseriesTuple {
     return &TimeseriesTuple {
         slot: slot,
         data: data,

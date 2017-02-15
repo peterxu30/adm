@@ -21,15 +21,13 @@ import (
 const (
     Url = "http://128.32.37.201:8079/api/query"
     YearNS = 31536000000000000
-    DataFolder = "data/"
-    TimeseriesFolder = "timeseries/"
+    TimeseriesFolder = "data/timeseries/"
     UuidDestination = "uuids.txt"
-    MetadataDestination = "metadata.txt"
+    MetadataDestination = "data/metadata.txt"
     TimeseriesDestination = "nil"
-    FileSize = 10000000 //amount of records in each timeseries file
     WorkerSize = 40
     OpenIO = 15
-    ReaderType = RM_NETWORK
+    ReaderType = RM_GILES
     WriterType = WM_FILE
     ChannelBuffer = 10
 )
@@ -39,12 +37,12 @@ type ReadMode uint8
 type WriteMode uint8
 
 const (
-    RM_NETWORK ReadMode = iota + 1
+    RM_GILES ReadMode = iota + 1
     RM_FILE
 )
 
 const (
-    WM_NETWORK WriteMode = iota + 1
+    WM_GILES WriteMode = iota + 1
     WM_FILE
 )
 
@@ -57,22 +55,23 @@ type ADMManager struct {
     writer Writer
     workers *Sema
     openIO *Sema
+    channelBufferSize int
+    chunkSize int64
     log             *Logger
     errorChan chan *ErrorLog
 }
 
-func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, writeMode WriteMode) *ADMManager {
-// func newADMManager(admConfig *AdmConfig) *ADMManager {
+func newADMManager(config *AdmConfig) *ADMManager {
     logger := newLogger()
 
-    reader := configureReader(readMode)
+    reader := configureReader(config.ReadMode)
 
     if reader == nil {
         log.Println("fatal: read mode unknown")
         return nil
     }
 
-    writer := configureWriter(writeMode)
+    writer := configureWriter(config.WriteMode)
 
     if writer == nil {
         log.Println("fatal: write mode unknown")
@@ -80,13 +79,15 @@ func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, wr
     }
 
     return &ADMManager{
-        url:      url,
-        readMode: readMode,
-        writeMode: writeMode,
+        url:      config.SourceUrl,
+        readMode: config.ReadMode,
+        writeMode: config.WriteMode,
         reader: reader,
         writer: writer,
-        workers: newSema(workerSize),
-        openIO: newSema(openIO),
+        workers: newSema(config.WorkerSize),
+        openIO: newSema(config.OpenIO),
+        channelBufferSize: config.ChannelBufferSize,
+        chunkSize: config.ChunkSize,
         log:      logger,
         errorChan: make(chan *ErrorLog, 100),
     }
@@ -94,8 +95,8 @@ func newADMManager(url string, workerSize int, openIO int, readMode ReadMode, wr
 
 func configureReader(mode ReadMode) Reader {
     switch mode {
-        case RM_NETWORK:
-            return newNetworkReader()
+        case RM_GILES:
+            return newGilesReader()
         case RM_FILE:
             fmt.Println("file reader not yet developed")
             return nil
@@ -107,11 +108,11 @@ func configureReader(mode ReadMode) Reader {
 
 func configureWriter(mode WriteMode) Writer {
     switch mode {
-        case WM_NETWORK:
+        case WM_GILES:
             fmt.Println("network writer not yet developed")
             break
         case WM_FILE:
-            err := os.MkdirAll(DataFolder + TimeseriesFolder, os.ModePerm)
+            err := os.MkdirAll(TimeseriesFolder, os.ModePerm)
             if err != nil {
                 log.Println("configureWriter: could not create data folder")
                 return nil
@@ -152,7 +153,7 @@ func (adm *ADMManager) processMetadata() {
     var wg sync.WaitGroup
     wg.Add(2)
 
-    dataChan := make(chan *MetadataTuple, ChannelBuffer)
+    dataChan := make(chan *MetadataTuple, adm.channelBufferSize)
     errored := false
     dest := adm.getMetadataDest()
 
@@ -163,7 +164,7 @@ func (adm *ADMManager) processMetadata() {
         defer adm.workers.release()
         defer adm.openIO.release()
         fmt.Println("processMetadata: Starting to read metadata")
-        err := adm.reader.readMetadata(adm.url, adm.uuids, dataChan) //TODO: Potentially bad style to not pass variables into routine.
+        err := adm.reader.readMetadata(adm.url, adm.uuids, dataChan)
 
         if err != nil {
             log.Println(err)
@@ -226,11 +227,11 @@ func (adm *ADMManager) getMetadataDest() func() string {
     return func() string {
         switch adm.readMode {
             case RM_FILE:
-                return DataFolder + MetadataDestination //placeholder
-            case RM_NETWORK:
-                return DataFolder + MetadataDestination
+                return MetadataDestination //placeholder
+            case RM_GILES:
+                return MetadataDestination
             default:
-                return DataFolder + MetadataDestination //placeholder
+                return MetadataDestination //placeholder
         }
     }
 }
@@ -255,7 +256,7 @@ func (adm *ADMManager) processTimeseriesData() {
         windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
     }
 
-    windows = append(windows, adm.generateDummyWindow("final", FileSize)) //to ensure final timeslot is processed
+    windows = append(windows, adm.generateDummyWindow("final", adm.chunkSize)) //to ensure final timeslot is processed
 
     var wg sync.WaitGroup
     dest := adm.getTimeseriesDest()
@@ -297,9 +298,9 @@ func (adm *ADMManager) processTimeseriesData() {
             }
 
             //dummy slot will always trigger final FileSize check
-            if (currentSize >= FileSize) && len(slotsToWrite) > 0 { //convert to memory size check later
+            if (currentSize >= adm.chunkSize) && len(slotsToWrite) > 0 { 
 
-                dataChan := make(chan *TimeseriesTuple, ChannelBuffer)
+                dataChan := make(chan *TimeseriesTuple, adm.channelBufferSize)
                 wg.Add(2)
 
                 adm.workers.acquire()
@@ -385,8 +386,8 @@ func (adm *ADMManager) processWindows() []*Window {
     }
 
     //2. number of uuids / min free resources = number of uuids per routine
-    length := len(adm.uuids[0:5])
-    log.Println(adm.uuids[0:5])
+    length := len(adm.uuids[0:2])
+    log.Println(adm.uuids[0:2])
     // windows = make([]*Window, len(adm.uuids))
     numUuidsPerRoutine := length / minFreeResources
     if numUuidsPerRoutine == 0 {
@@ -433,6 +434,7 @@ func (adm *ADMManager) processWindows() []*Window {
             fmt.Println("putting window in chan")
             // for i, window := range windowSlice {
             for i := 0; i < end - start; i++ {
+                fmt.Println(i, end-start)
                 window := windowSlice[i]
                 fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
                 windowChan <- window
@@ -455,14 +457,14 @@ func (adm *ADMManager) processWindows() []*Window {
 
 func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) {
     for _, uuid := range uuids {
-        windows = append(windows, adm.generateDummyWindow(uuid, FileSize))
+        windows = append(windows, adm.generateDummyWindow(uuid, adm.chunkSize))
     }
     return
 }
 
-func (adm *ADMManager) generateDummyWindow(uuid string, fileSize int) *Window {
+func (adm *ADMManager) generateDummyWindow(uuid string, size int64) *Window {
     readings := make([][]float64, 1)
-    readings[0] = []float64{0, float64(fileSize), 0, 0}
+    readings[0] = []float64{0, float64(size), 0, 0}
     return &Window {
         Uuid: uuid,
         Readings: readings,
@@ -474,10 +476,10 @@ func (adm *ADMManager) getTimeseriesDest() func() string {
     return func() string {
         switch adm.writeMode {
             case WM_FILE:
-                dest := DataFolder + TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
+                dest := TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
                 fileCount++
                 return dest
-            case WM_NETWORK:
+            case WM_GILES:
                 return TimeseriesDestination //placeholder
             default:
                 return TimeseriesDestination //placeholder        
@@ -537,7 +539,13 @@ func (adm *ADMManager) run() {
 }
 
 func main() {
-    adm := newADMManager(Url, WorkerSize, OpenIO, RM_NETWORK, WM_FILE)
+    admConfig, err := newAdmConfig() //TODO: finish config
+    if err != nil {
+        log.Println("Bad config file.")
+        // createConfigFile()
+    }
+
+    adm := newADMManager(admConfig)
     go func() {
         for {
             time.Sleep(10 * time.Second)
