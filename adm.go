@@ -19,17 +19,9 @@ import (
 )
 
 const (
-    Url = "http://128.32.37.201:8079/api/query"
-    YearNS = 31536000000000000
-    TimeseriesFolder = "data/timeseries/"
-    UuidDestination = "uuids.txt"
-    MetadataDestination = "data/metadata.txt"
-    TimeseriesDestination = "nil"
-    WorkerSize = 40
-    OpenIO = 15
-    ReaderType = RM_GILES
-    WriterType = WM_FILE
-    ChannelBuffer = 10
+    YEAR_NS = 31536000000000000
+    TIMESERIES_FOLDER = "data/timeseries/"
+    CHANNEL_BUFFER_SIZE = 10
 )
 
 type ReadMode uint8
@@ -55,7 +47,7 @@ type ADMManager struct {
     writer Writer
     workers *Sema
     openIO *Sema
-    channelBufferSize int
+    config *AdmConfig
     chunkSize int64
     log             *Logger
     errorChan chan *ErrorLog
@@ -86,7 +78,7 @@ func newADMManager(config *AdmConfig) *ADMManager {
         writer: writer,
         workers: newSema(config.WorkerSize),
         openIO: newSema(config.OpenIO),
-        channelBufferSize: config.ChannelBufferSize,
+        config: config,
         chunkSize: config.ChunkSize,
         log:      logger,
         errorChan: make(chan *ErrorLog, 100),
@@ -112,7 +104,7 @@ func configureWriter(mode WriteMode) Writer {
             fmt.Println("network writer not yet developed")
             break
         case WM_FILE:
-            err := os.MkdirAll(TimeseriesFolder, os.ModePerm)
+            err := os.MkdirAll(TIMESERIES_FOLDER, os.ModePerm)
             if err != nil {
                 log.Println("configureWriter: could not create data folder")
                 return nil
@@ -153,7 +145,7 @@ func (adm *ADMManager) processMetadata() {
     var wg sync.WaitGroup
     wg.Add(2)
 
-    dataChan := make(chan *MetadataTuple, adm.channelBufferSize)
+    dataChan := make(chan *MetadataTuple, CHANNEL_BUFFER_SIZE)
     errored := false
     dest := adm.getMetadataDest()
 
@@ -227,11 +219,11 @@ func (adm *ADMManager) getMetadataDest() func() string {
     return func() string {
         switch adm.readMode {
             case RM_FILE:
-                return MetadataDestination //placeholder
+                return adm.config.MetadataDest //placeholder
             case RM_GILES:
-                return MetadataDestination
+                return adm.config.MetadataDest
             default:
-                return MetadataDestination //placeholder
+                return adm.config.MetadataDest //placeholder
         }
     }
 }
@@ -300,7 +292,7 @@ func (adm *ADMManager) processTimeseriesData() {
             //dummy slot will always trigger final FileSize check
             if (currentSize >= adm.chunkSize) && len(slotsToWrite) > 0 { 
 
-                dataChan := make(chan *TimeseriesTuple, adm.channelBufferSize)
+                dataChan := make(chan *TimeseriesTuple, CHANNEL_BUFFER_SIZE)
                 wg.Add(2)
 
                 adm.workers.acquire()
@@ -378,8 +370,8 @@ func (adm *ADMManager) processTimeseriesData() {
 func (adm *ADMManager) processWindows() []*Window {
     var windows []*Window
     //1. Find minimum number free resources from workers and openIO
-    minFreeWorkers := WorkerSize - adm.workers.count()
-    minFreeOpenIO := OpenIO - adm.openIO.count()
+    minFreeWorkers := adm.config.WorkerSize - adm.workers.count()
+    minFreeOpenIO := adm.config.OpenIO - adm.openIO.count()
     minFreeResources := minFreeWorkers
     if minFreeOpenIO < minFreeWorkers {
         minFreeResources = minFreeOpenIO
@@ -476,13 +468,13 @@ func (adm *ADMManager) getTimeseriesDest() func() string {
     return func() string {
         switch adm.writeMode {
             case WM_FILE:
-                dest := TimeseriesFolder + "ts_" + strconv.Itoa(fileCount)
+                dest := TIMESERIES_FOLDER + "ts_" + strconv.Itoa(fileCount)
                 fileCount++
                 return dest
             case WM_GILES:
-                return TimeseriesDestination //placeholder
+                return adm.config.TimeseriesDest //placeholder
             default:
-                return TimeseriesDestination //placeholder        
+                return adm.config.TimeseriesDest //placeholder        
         }
     }
 }

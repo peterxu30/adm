@@ -12,9 +12,9 @@ import (
 )
 
 const (
-    WindowBatchSize = 10
-    MetadataBatchSize = 10
-    QueryTimeout = 30
+    WINDOW_BATCH_SIZE = 10
+    METADATA_BATCH_SIZE = 10
+    QUERY_TIMEOUT = 30
 )
 
 type GilesReader struct{}
@@ -48,7 +48,7 @@ func (r *GilesReader) readWindows(src string, uuids []string) ([]*Window, *Proce
         
         uuidsToBatch = append(uuidsToBatch, uuid)
 
-        if len(uuidsToBatch) == WindowBatchSize || i == (length - 1) {
+        if len(uuidsToBatch) == WINDOW_BATCH_SIZE || i == (length - 1) {
             newWindows, err := r.readWindowsBatched(src, uuidsToBatch)
             if err != nil {
                 log.Println("readWindows: err:", err)
@@ -122,7 +122,7 @@ func (r *GilesReader) readMetadata(src string, uuids []string, dataChan chan *Me
     for i, uuid := range uuids {
         uuidsToBatch = append(uuidsToBatch, uuid)
 
-        if len(uuidsToBatch) == MetadataBatchSize || i == (length - 1) {
+        if len(uuidsToBatch) == METADATA_BATCH_SIZE || i == (length - 1) {
             body, err := r.readMetadataBatched(src, uuidsToBatch)
             
             if err != nil {
@@ -245,7 +245,7 @@ func (r *GilesReader) makeQuery(url string, queryString string) (body []byte, er
         return nil, fmt.Errorf("makeQuery: could not create new request to", url, "for", queryString, "err:", err)
     }
 
-    timeout := time.Duration(QueryTimeout * time.Second)
+    timeout := time.Duration(QUERY_TIMEOUT * time.Second)
     client := &http.Client{
         Timeout: timeout,
     }

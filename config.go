@@ -20,7 +20,6 @@ type AdmConfig struct {
 	ReadMode ReadMode `yaml:"readMode"`
 	WriteMode WriteMode `yaml:"writeMode"`
 	ChunkSize int64 `yaml:"chunkSize"`
-	ChannelBufferSize int `yaml:"channelBufferSize"`
 }
 
 func newAdmConfig() (*AdmConfig, error) {
@@ -51,7 +50,7 @@ func readConfigFile() ([]byte, error) {
 }
 
 func createConfigFile() error {
-	body := []byte("sourceUrl:\nworkerSize:\nopenIO:\nuuidDest:\nmetadataDest:\ntimeseriesDest:\nreadMode:\nwriteMode:\nchunkSize:\nchannelBufferSize:")
+	body := []byte("sourceUrl:\nworkerSize:\nopenIO:\nuuidDest:\nmetadataDest:\ntimeseriesDest:\nreadMode:\nwriteMode:\nchunkSize:")
 	err := ioutil.WriteFile(CONFIG_FILE, body, 0644)
 	return err
 }

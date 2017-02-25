@@ -1,10 +1,10 @@
-sourceUrl: "http://128.32.37.201:8079/api/query"
-workerSize: 40
-openIO: 10
+sourceUrl: "http://128.32.37.201:8079/api/query" # Endpoint to query. Not used in file read mode.
+workerSize: 40 # Number of threads allowed.
+openIO: 10 # Number of open IOs allowed.
 uuidDest: "uuids.txt"
 metadataDest: "data/metadata.txt"
 timeseriesDest: "nil"
-readMode: 1
-writeMode: 2
-chunkSize: 10000000
-channelBufferSize: 10
+readMode: 1 # 1 - giles, 2 - file
+writeMode: 2 # 1 - giles, 2 - file
+chunkSize: 10000000 # number of records to process in each thread.
+channelBufferSize: 10 # number of elements allowed within channels.
