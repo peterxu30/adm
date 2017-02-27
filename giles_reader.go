@@ -14,7 +14,8 @@ import (
 const (
     WINDOW_BATCH_SIZE = 10
     METADATA_BATCH_SIZE = 10
-    QUERY_TIMEOUT = 30
+    QUERY_TIMEOUT = 10
+    QUERY_TRIES = 3
 )
 
 type GilesReader struct{}
@@ -212,10 +213,12 @@ func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan
 
         var timeseries []*TimeseriesData
         err = json.Unmarshal(body, &timeseries)
+        fmt.Println("len of channel:", len(dataChan))
         if err != nil {
             log.Println("readTimeseriesData: could not unmarshal slot:", slot.Uuid, "query:", query, "err:", err)
+            fmt.Println("readTimeseriesData: bad data", string(body))
             failed = append(failed, slot)
-            continue
+            continue         
         } else {
             log.Println("readTimeseriesData: inserting uuid", slot.Uuid, "into channel")
             dataChan <- r.makeTimeseriesTuple(slot, body)
@@ -238,28 +241,39 @@ func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan
  * Return value is of type []byte. It is up to the calling function to convert
  * []byte into the appropriate type.
  */
-func (r *GilesReader) makeQuery(url string, queryString string) (body []byte, err error) {
-    query := []byte(queryString)
-    req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
-    if err != nil {
-        return nil, fmt.Errorf("makeQuery: could not create new request to", url, "for", queryString, "err:", err)
-    }
+func (r *GilesReader) makeQuery(url string, queryString string) ([]byte, error) {
+    var body []byte
+    var err error
+    for i := 0; i < QUERY_TRIES; i++ {
+        // t := time.Duration(QUERY_TIMEOUT + (5 * i))
+        time.Sleep(5 * time.Second)
+        t := time.Duration(QUERY_TIMEOUT * (i + 1))
+        query := []byte(queryString)
+        req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
+        if err != nil {
+            body, err = nil, fmt.Errorf("makeQuery: could not create new request to", url, "for", queryString, "err:", err)
+            continue
+        }
 
-    timeout := time.Duration(QUERY_TIMEOUT * time.Second)
-    client := &http.Client{
-        Timeout: timeout,
-    }
-    resp, err := client.Do(req)
-    if err != nil {
-        return nil, fmt.Errorf("makeQuery: failed to execute request to", url, "for", queryString, "err:", err)
-    }
+        timeout := time.Duration(t * time.Second)
+        client := &http.Client{
+            Timeout: timeout,
+        }
+        resp, err := client.Do(req)
+        if err != nil {
+            body, err = nil, fmt.Errorf("makeQuery: failed to execute request to", url, "for", queryString, "err:", err)
+            continue
+        }
 
-    defer resp.Body.Close()
-    body, err = ioutil.ReadAll(resp.Body)
-    if err != nil {
-        return nil, fmt.Errorf("makeQuery: failed to read response body from", url, "for", queryString, "err:", err)
+        defer resp.Body.Close()
+        body, err = ioutil.ReadAll(resp.Body)
+        if err != nil {
+            body, err = nil, fmt.Errorf("makeQuery: failed to read response body from", url, "for", queryString, "err:", err)
+            continue
+        }
+        return body, err
     }
-    return
+    return body, err
 }
 
 func (r *GilesReader) composeBatchQuery(query string, uuids []string) string {

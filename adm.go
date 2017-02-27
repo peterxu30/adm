@@ -237,7 +237,7 @@ func (adm *ADMManager) processTimeseriesData() {
     windows := adm.processWindows()
     if len(windows) == 0 {
         log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
-        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:5])...)
+        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:10])...)
     }
 
     windows = append(windows, adm.generateDummyWindow("final", adm.chunkSize)) //to ensure final timeslot is processed
@@ -370,8 +370,8 @@ func (adm *ADMManager) processWindows() []*Window {
     }
 
     //2. number of uuids / min free resources = number of uuids per routine
-    length := len(adm.uuids[0:2])
-    log.Println(adm.uuids[0:2])
+    length := len(adm.uuids[0:10])
+    log.Println(adm.uuids[0:10])
     // windows = make([]*Window, len(adm.uuids))
     numUuidsPerRoutine := length / minFreeResources
     if numUuidsPerRoutine == 0 {

@@ -7,4 +7,3 @@ timeseriesDest: "nil"
 readMode: 1 # 1 - giles, 2 - file
 writeMode: 2 # 1 - giles, 2 - file
 chunkSize: 10000000 # number of records to process in each thread.
-channelBufferSize: 10 # number of elements allowed within channels.
