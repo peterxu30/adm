@@ -19,7 +19,7 @@ func testNRTeardown() {
 }
 
 func newTestNetworkReader() *NetworkReader {
-	return newNetworkReader(newTestLog())
+	return newGilesReader(newTestLog())
 }
 
 func TestNRReadUuids(t *testing.T) {

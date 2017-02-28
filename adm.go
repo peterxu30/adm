@@ -416,13 +416,18 @@ func (adm *ADMManager) processWindows() []*Window {
             }
 
             fmt.Println("putting window in chan")
+            received := make(map[string]bool)
             // for i, window := range windowSlice {
             for i := 0; i < end - start; i++ {
                 fmt.Println(i, end-start)
                 window := windowSlice[i]
-                fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
-                windowChan <- window
-                fmt.Println("put window in chan. curr len:", len(windowChan), length)
+
+                if _, ok := received[window.Uuid]; !ok {
+                    fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
+                    windowChan <- window
+                    fmt.Println("put window in chan. curr len:", len(windowChan), length)
+                    received[window.Uuid] = true
+                }
             }
         }(i, end, windows, &wg)
 
