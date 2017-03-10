@@ -7,19 +7,19 @@ import (
 )
 
 const (
-	CONFIG_FILE = "config.yml"
+	CONFIG_FILE = "params.yml"
 )
 
 type AdmConfig struct {
-	SourceUrl string `yaml:"sourceUrl"`
-	WorkerSize int `yaml:"workerSize"`
-	OpenIO int `yaml:"openIO"`
-	UuidDest string `yaml:"uuidDest"`
-	MetadataDest string `yaml:"metadataDest"`
-	TimeseriesDest string `yaml:"timeseriesDest"`
-	ReadMode ReadMode `yaml:"readMode"`
-	WriteMode WriteMode `yaml:"writeMode"`
-	ChunkSize int64 `yaml:"chunkSize"`
+	SourceUrl string `yaml:"source_url"`
+	WorkerSize int `yaml:"worker_size"`
+	OpenIO int `yaml:"open_io"`
+	UuidDest string `yaml:"uuid_dest"`
+	MetadataDest string `yaml:"metadata_dest"`
+	TimeseriesDest string `yaml:"timeseries_dest"`
+	ReadMode ReadMode `yaml:"read_mode"`
+	WriteMode WriteMode `yaml:"write_mode"`
+	ChunkSize int64 `yaml:"chunk_size"`
 }
 
 func newAdmConfig() (*AdmConfig, error) {
@@ -50,7 +50,7 @@ func readConfigFile() ([]byte, error) {
 }
 
 func createConfigFile() error {
-	body := []byte("sourceUrl:\nworkerSize:\nopenIO:\nuuidDest:\nmetadataDest:\ntimeseriesDest:\nreadMode:\nwriteMode:\nchunkSize:")
+	body := []byte("source_url:\nworker_size:\nopen_io:\nuuid_dest:\nmetadata_dest:\ntimeseries_dest:\nread_mode:\nwrite_mode:\nchunk_size:")
 	err := ioutil.WriteFile(CONFIG_FILE, body, 0644)
 	return err
 }

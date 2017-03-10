@@ -1,0 +1,9 @@
+source_url: "http://128.32.37.201:8079/api/query" # Endpoint to query. Not used in file read mode.
+worker_size: 40 # Number of threads allowed.
+open_io: 10 # Number of open IOs allowed.
+uuid_dest: "uuids.txt"
+metadata_dest: "data/metadata.txt"
+timeseries_dest: "nil"
+read_mode: 1 # 1 - giles, 2 - file
+write_mode: 2 # 1 - giles, 2 - file
+chunk_size: 10000000 # number of records to process in each thread.
