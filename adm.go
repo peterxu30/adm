@@ -13,7 +13,6 @@ import (
 
 const (
     YEAR_NS = 31536000000000000
-    TIMESERIES_FOLDER = "data/timeseries/"
     CHANNEL_BUFFER_SIZE = 10
 )
 
@@ -232,7 +231,7 @@ func (adm *ADMManager) processTimeseriesData() {
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
     //DUMMY WINDOWS
-    // windows := adm.generateDummyWindows(adm.uuids[0:5])
+    // windows := generateDummyWindows(adm.uuids[0:5])
     // log.Println("timeseries uuids:", adm.uuids[0:5])
     // log.Println(windows[4])
 
@@ -240,10 +239,10 @@ func (adm *ADMManager) processTimeseriesData() {
     windows := adm.processWindows()
     if len(windows) == 0 {
         log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
-        windows = append(windows, adm.generateDummyWindows(adm.uuids[0:10])...)
+        windows = append(windows, generateDummyWindows(adm.uuids, adm.chunkSize)...)
     }
 
-    windows = append(windows, adm.generateDummyWindow("final", adm.chunkSize)) //to ensure final timeslot is processed
+    windows = append(windows, generateDummyWindow("final", adm.chunkSize)) //to ensure final timeslot is processed
 
     var wg sync.WaitGroup
     dest := adm.getTimeseriesDest()
@@ -442,23 +441,6 @@ func (adm *ADMManager) processWindows() []*Window {
     return windows
 }
 
-func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) {
-    for _, uuid := range uuids {
-        windows = append(windows, adm.generateDummyWindow(uuid, adm.chunkSize))
-    }
-    return
-}
-
-//TODO: Generate based off of temporal interval.
-func (adm *ADMManager) generateDummyWindow(uuid string, size int64) *Window {
-    readings := make([][]float64, 1)
-    readings[0] = []float64{0, float64(size), 0, 0}
-    return &Window {
-        Uuid: uuid,
-        Readings: readings,
-    }
-}
-
 func (adm *ADMManager) getTimeseriesDest() func() string {
     fileCount := 0
     return func() string {
@@ -560,6 +542,5 @@ func main() {
         log.SetOutput(logFile)
     }
     log.Println("Log initialized.")
-
     adm.run()
 }

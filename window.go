@@ -1,8 +1,11 @@
 package main
 
+import (
+    "time"
+)
 type Window struct {
     Uuid string `json:"uuid"`
-    Readings [][]float64
+    Readings [][]float64 //API call returns float values. Need to be converted to int64 in TimeSlots.
 }
 
 type TimeSlot struct {
@@ -33,4 +36,25 @@ func (window *Window) getTimeSlots() []*TimeSlot {
     }
 
     return slots
+}
+
+func generateDummyWindows(uuids []string, size int64) (windows []*Window) {
+    for _, uuid := range uuids {
+        windows = append(windows, generateDummyWindow(uuid, size))
+    }
+    return
+}
+
+func generateDummyWindow(uuid string, size int64) *Window {
+    currentTime := time.Now().UnixNano()
+    var start int64
+    var readings [][]float64
+    for start = 0; start < currentTime; start += YEAR_NS {
+        readings = append(readings, []float64{float64(start), float64(size), 0, 0})
+    } 
+
+    return &Window {
+        Uuid: uuid,
+        Readings: readings,
+    }
 }
