@@ -33,7 +33,7 @@ func (w *FileWriter) writeUuids(dest string, uuids []string) *ProcessError {
 }
 
 func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *ProcessError {
-	if !w.fileExists(dest) {
+	if !fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
 	    	return newProcessError(fmt.Sprint("writeMetadata: could not create metadata file:", dest, "err:", err), true, nil)
@@ -91,7 +91,7 @@ func (w *FileWriter) writeMetadata(dest string, dataChan chan *MetadataTuple) *P
 }
 
 func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesTuple) *ProcessError {
-	if !w.fileExists(dest) {
+	if !fileExists(dest) {
 		err := ioutil.WriteFile(dest, []byte("["), 0644)
 	    if err != nil {
 			return newProcessError(fmt.Sprint("writeTimeseriesData: could not write timeseries data file:", dest, "err:", err), true, nil)
@@ -154,14 +154,4 @@ func (w *FileWriter) writeTimeseriesData(dest string, dataChan chan *TimeseriesT
 		return newProcessError(fmt.Sprint("writeTimeseriesData: failed to write uuids:", failed), false, failed)
 	}
 	return nil
-}
-
-/*
-cite: http://stackoverflow.com/questions/12518876/how-to-check-if-a-file-exists-in-go
-*/
-func (w *FileWriter) fileExists(file string) bool {
-	if _, err := os.Stat(file); err == nil {
-		return true
-	}
-	return false
 }

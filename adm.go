@@ -112,19 +112,6 @@ func configureWriter(mode WriteMode) Writer {
     return nil
 }
 
-func getDirPath(path string) (dp string) {
-    fldr_lst := strings.Split(path, "/")
-    fldr_lst = fldr_lst[:len(fldr_lst) - 1]
-    return concatDirPath(fldr_lst)
-}
-
-func concatDirPath(path []string) (dp string) {
-    for _, str := range path {
-        dp += str + "/"
-    }
-    return
-}
-
 func (adm *ADMManager) processUuids() {
     if (adm.log.getLogMetadata(UUIDS_FETCHED) == WRITE_COMPLETE) {
         fmt.Println("processUuids: uuids were previously read")
@@ -543,7 +530,7 @@ func (adm *ADMManager) run() {
 func main() {
     admConfig, err := newAdmConfig()
     if err != nil {
-        if _, err := os.Stat(CONFIG_FILE); os.IsNotExist(err) {
+        if !fileExists(CONFIG_FILE) {
             createConfigFile()
             log.Println("No config file detected.\nNew config file created.")
         } else {

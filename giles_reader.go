@@ -2,13 +2,9 @@ package main
 
 import (
     "encoding/json"
-    "bytes"
     "fmt"
-    "io/ioutil"
     "log"
-    "net/http"
     "strconv"
-    "time"
 )
 
 const (
@@ -26,7 +22,7 @@ func newGilesReader() *GilesReader {
 
 func (r *GilesReader) readUuids(src string) ([]string, *ProcessError) {
     var uuids []string
-    body, err := r.makeQuery(src, "select distinct uuid")
+    body, err := makeQuery(src, "select distinct uuid")
     if err != nil {
         return nil, newProcessError(fmt.Sprint("readUuids: read uuids failed err:", err), true, nil)
     }
@@ -83,8 +79,8 @@ func (r *GilesReader) readWindowsBatched(src string, uuids []string) ([]*Window,
     var windows []*Window
     query := "select window(365d) data in (0, now) where uuid ="
 
-    query = r.composeBatchQuery(query, uuids)
-    body, err := r.makeQuery(src, query)
+    query = composeBatchQuery(query, uuids)
+    body, err := makeQuery(src, query)
     if err != nil {
         fmt.Println("bad query string:", query)
         return nil, fmt.Errorf("readWindowsBatched: query failed for uuids:", uuids, "err:", err)
@@ -101,7 +97,7 @@ func (r *GilesReader) readWindowsBatched(src string, uuids []string) ([]*Window,
 func (r *GilesReader) readWindow(src string, uuid string) (*Window, error) {
     var window *Window
     query := "select window(365d) data in (0, now) where uuid = '" + uuid + "'"
-    body, err := r.makeQuery(src, query)
+    body, err := makeQuery(src, query)
     if err != nil {
         return nil, fmt.Errorf("readWindow: query failed for uuid:", uuid, "err:", err)
     }
@@ -134,11 +130,11 @@ func (r *GilesReader) readMetadata(src string, uuids []string, dataChan chan *Me
                         log.Println("readMetadataBatched: bad uuid", uuid)
                         failed = append(failed, uuid)
                     } else {
-                        dataChan <- r.makeMetadataTuple([]string{uuid}, singleBody)
+                        dataChan <- makeMetadataTuple([]string{uuid}, singleBody)
                     }
                 }
             } else {
-                dataChan <- r.makeMetadataTuple(uuidsToBatch, body)
+                dataChan <- makeMetadataTuple(uuidsToBatch, body)
             }
 
             uuidsToBatch = make([]string, 0)
@@ -156,8 +152,8 @@ func (r *GilesReader) readMetadata(src string, uuids []string, dataChan chan *Me
 func (r *GilesReader) readMetadataBatched(src string, uuids []string) ([]byte, error) {
     query := "select * where uuid ="
 
-    query = r.composeBatchQuery(query, uuids)
-    body, err := r.makeQuery(src, query)
+    query = composeBatchQuery(query, uuids)
+    body, err := makeQuery(src, query)
     if err != nil {
         fmt.Println("bad query string:", query)
         return nil, fmt.Errorf("readMetadataBatched: query failed for uuids:", uuids, "err:", err)
@@ -175,7 +171,7 @@ func (r *GilesReader) readMetadataBatched(src string, uuids []string) ([]byte, e
 //helper function
 func (r *GilesReader) readSingleMetadata(src string, uuid string) ([]byte, error) {
     query := "select * where uuid =" + uuid
-    body, err := r.makeQuery(src, query)
+    body, err := makeQuery(src, query)
     if err != nil {
         return nil, fmt.Errorf("readSingleMetadata: query failed for uuid:", uuid, "err:", err)
     }
@@ -201,7 +197,7 @@ func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan
         log.Println("readTimeseriesData: making query for uuid", slot.Uuid, slot.StartTime, slot.EndTime)
         query := "select data in (" + startTime + ", " + endTime + ") as ns where uuid='" + slot.Uuid + "'"
         log.Println("readTimeseriesData: query string:", query)
-        body, err := r.makeQuery(src, query)
+        body, err := makeQuery(src, query)
         log.Println("readTimeseriesData: query complete for uuid", slot.Uuid, slot.StartTime, slot.EndTime)
         
         if err != nil {
@@ -221,7 +217,7 @@ func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan
             continue         
         } else {
             log.Println("readTimeseriesData: inserting uuid", slot.Uuid, "into channel")
-            dataChan <- r.makeTimeseriesTuple(slot, body)
+            dataChan <- makeTimeseriesTuple(slot, body)
             log.Println("readTimeseriesData: insert complete for uuid", slot.Uuid, "into channel")            
         }
         log.Println("readTimeseriesData: read uuid", slot.Uuid)
@@ -234,71 +230,4 @@ func (r *GilesReader) readTimeseriesData(src string, slots []*TimeSlot, dataChan
     }
 
     return nil
-}
-
-/* General purpose function to make an HTTP POST request to the specified url
- * with the specified queryString.
- * Return value is of type []byte. It is up to the calling function to convert
- * []byte into the appropriate type.
- */
-func (r *GilesReader) makeQuery(url string, queryString string) ([]byte, error) {
-    var body []byte
-    var err error
-    for i := 0; i < QUERY_TRIES; i++ {
-        // t := time.Duration(QUERY_TIMEOUT + (5 * i))
-        time.Sleep(5 * time.Second)
-        t := time.Duration(QUERY_TIMEOUT * (i + 1))
-        query := []byte(queryString)
-        req, err := http.NewRequest("POST", url, bytes.NewBuffer(query))
-        if err != nil {
-            body, err = nil, fmt.Errorf("makeQuery: could not create new request to", url, "for", queryString, "err:", err)
-            continue
-        }
-
-        timeout := time.Duration(t * time.Second)
-        client := &http.Client{
-            Timeout: timeout,
-        }
-        resp, err := client.Do(req)
-        if err != nil {
-            body, err = nil, fmt.Errorf("makeQuery: failed to execute request to", url, "for", queryString, "err:", err)
-            continue
-        }
-
-        defer resp.Body.Close()
-        body, err = ioutil.ReadAll(resp.Body)
-        if err != nil {
-            body, err = nil, fmt.Errorf("makeQuery: failed to read response body from", url, "for", queryString, "err:", err)
-            continue
-        }
-        return body, err
-    }
-    return body, err
-}
-
-func (r *GilesReader) composeBatchQuery(query string, uuids []string) string {
-    first := true
-    for _, uuid := range uuids {
-        if !first {
-            query += " or uuid = "
-        } else {
-            first = false
-        }
-        query += "'" + uuid + "'"
-    }
-    return query
-}
-
-func (r *GilesReader) makeMetadataTuple(uuids []string, data []byte) *MetadataTuple {
-    return &MetadataTuple {
-        uuids: uuids,
-        data: data,
-    }
-}
-
-func (r *GilesReader) makeTimeseriesTuple(slot *TimeSlot, data []byte) *TimeseriesTuple {
-    return &TimeseriesTuple {
-        slot: slot,
-        data: data,
-    }
 }
