@@ -38,18 +38,18 @@ func (window *Window) getTimeSlots() []*TimeSlot {
     return slots
 }
 
-func generateDummyWindows(uuids []string, size int64) (windows []*Window) {
+func generateDummyWindows(uuids []string, size int64, interval int64) (windows []*Window) {
     for _, uuid := range uuids {
-        windows = append(windows, generateDummyWindow(uuid, size))
+        windows = append(windows, generateDummyWindow(uuid, size, interval))
     }
     return
 }
 
-func generateDummyWindow(uuid string, size int64) *Window {
+func generateDummyWindow(uuid string, size int64, interval int64) *Window {
     currentTime := time.Now().UnixNano()
     var start int64
     var readings [][]float64
-    for start = 0; start < currentTime; start += YEAR_NS {
+    for start = 0; start < currentTime; start += interval {
         readings = append(readings, []float64{float64(start), float64(size), 0, 0})
     } 
 

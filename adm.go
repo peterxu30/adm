@@ -231,7 +231,7 @@ func (adm *ADMManager) processTimeseriesData() {
     fmt.Println("processTimeseriesData: About to start processing timeseries data")
 
     //DUMMY WINDOWS
-    // windows := generateDummyWindows(adm.uuids[0:5])
+    // windows := generateDummyWindows(adm.uuids[0:5], YEAR_NS)
     // log.Println("timeseries uuids:", adm.uuids[0:5])
     // log.Println(windows[4])
 
@@ -239,10 +239,10 @@ func (adm *ADMManager) processTimeseriesData() {
     windows := adm.processWindows()
     if len(windows) == 0 {
         log.Println("processTimeseriesData: no windows generated. Attempting to proceed with dummy windows.")
-        windows = append(windows, generateDummyWindows(adm.uuids, adm.chunkSize)...)
+        windows = append(windows, generateDummyWindows(adm.uuids, adm.chunkSize, YEAR_NS)...)
     }
 
-    windows = append(windows, generateDummyWindow("final", adm.chunkSize)) //to ensure final timeslot is processed
+    windows = append(windows, generateDummyWindow("final", adm.chunkSize, YEAR_NS)) //to ensure final timeslot is processed
 
     var wg sync.WaitGroup
     dest := adm.getTimeseriesDest()
