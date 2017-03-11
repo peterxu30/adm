@@ -8,13 +8,13 @@ import (
 
 const (
 	CONFIG_FILE = "params.yml"
+	PARAMS_YML = "source_url:\nworker_size:\nopen_io:\nmetadata_dest:\ntimeseries_dest:\nread_mode:\nwrite_mode:\nchunk_size:"
 )
 
 type AdmConfig struct {
 	SourceUrl string `yaml:"source_url"`
 	WorkerSize int `yaml:"worker_size"`
 	OpenIO int `yaml:"open_io"`
-	UuidDest string `yaml:"uuid_dest"`
 	MetadataDest string `yaml:"metadata_dest"`
 	TimeseriesDest string `yaml:"timeseries_dest"`
 	ReadMode ReadMode `yaml:"read_mode"`
@@ -50,7 +50,7 @@ func readConfigFile() ([]byte, error) {
 }
 
 func createConfigFile() error {
-	body := []byte("source_url:\nworker_size:\nopen_io:\nuuid_dest:\nmetadata_dest:\ntimeseries_dest:\nread_mode:\nwrite_mode:\nchunk_size:")
+	body := []byte(PARAMS_YML)
 	err := ioutil.WriteFile(CONFIG_FILE, body, 0644)
 	return err
 }

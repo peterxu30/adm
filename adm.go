@@ -6,6 +6,7 @@ import (
     "runtime"
     "os"
     "strconv"
+    "strings"
     "sync"
     "time"
 )
@@ -47,6 +48,13 @@ type ADMManager struct {
 
 func newADMManager(config *AdmConfig) *ADMManager {
     logger := newLogger()
+
+    mdata_dest :=getDirPath(config.MetadataDest)
+    os.MkdirAll(mdata_dest, os.ModePerm)
+
+    tsr_dest := getDirPath(config.TimeseriesDest)
+    fmt.Println("TSR DEST:", tsr_dest, mdata_dest)
+    os.MkdirAll(tsr_dest, os.ModePerm)
 
     reader := configureReader(config.ReadMode)
 
@@ -96,17 +104,25 @@ func configureWriter(mode WriteMode) Writer {
             fmt.Println("network writer not yet developed")
             break
         case WM_FILE:
-            err := os.MkdirAll(TIMESERIES_FOLDER, os.ModePerm)
-            if err != nil {
-                log.Println("configureWriter: could not create data folder")
-                return nil
-            }
             return newFileWriter()
         default:
             log.Println("write mode unknown")
             return nil
     }
     return nil
+}
+
+func getDirPath(path string) (dp string) {
+    fldr_lst := strings.Split(path, "/")
+    fldr_lst = fldr_lst[:len(fldr_lst) - 1]
+    return concatDirPath(fldr_lst)
+}
+
+func concatDirPath(path []string) (dp string) {
+    for _, str := range path {
+        dp += str + "/"
+    }
+    return
 }
 
 func (adm *ADMManager) processUuids() {
@@ -143,7 +159,7 @@ func (adm *ADMManager) processMetadata() {
 
     adm.workers.acquire()
     adm.openIO.acquire()
-    go func(wg *sync.WaitGroup) {
+    go func() {
         defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
@@ -162,11 +178,11 @@ func (adm *ADMManager) processMetadata() {
             }
             errored = true
         }
-    }(&wg)
+    }()
 
     adm.workers.acquire()
     adm.openIO.acquire()
-    go func(dest string, wg *sync.WaitGroup) {
+    go func(dest string) {
         defer wg.Done()
         defer adm.workers.release()
         defer adm.openIO.release()
@@ -195,7 +211,7 @@ func (adm *ADMManager) processMetadata() {
             }
         }
 
-    }(dest(), &wg)
+    }(dest())
 
     wg.Wait()
 
@@ -370,8 +386,8 @@ func (adm *ADMManager) processWindows() []*Window {
     }
 
     //2. number of uuids / min free resources = number of uuids per routine
-    length := len(adm.uuids[0:10])
-    log.Println(adm.uuids[0:10])
+    length := len(adm.uuids)
+    log.Println(adm.uuids)
     // windows = make([]*Window, len(adm.uuids))
     numUuidsPerRoutine := length / minFreeResources
     if numUuidsPerRoutine == 0 {
@@ -391,7 +407,7 @@ func (adm *ADMManager) processWindows() []*Window {
         adm.workers.acquire()
         adm.openIO.acquire()
         wg.Add(1)
-        go func(start int, end int, windows []*Window, wg *sync.WaitGroup) {
+        go func(start int, end int) {
             defer adm.workers.release()
             defer adm.openIO.release()
             defer wg.Done()
@@ -417,11 +433,7 @@ func (adm *ADMManager) processWindows() []*Window {
 
             fmt.Println("putting window in chan")
             received := make(map[string]bool)
-            // for i, window := range windowSlice {
-            for i := 0; i < end - start; i++ {
-                fmt.Println(i, end-start)
-                window := windowSlice[i]
-
+            for _, window := range windowSlice {
                 if _, ok := received[window.Uuid]; !ok {
                     fmt.Println("start:", start, "i:", i, "end:", end, "len windowSlice:", len(windowSlice), "len uuids:", len(adm.uuids[start:end]))
                     windowChan <- window
@@ -429,16 +441,15 @@ func (adm *ADMManager) processWindows() []*Window {
                     received[window.Uuid] = true
                 }
             }
-        }(i, end, windows, &wg)
-
-        fmt.Println("processWindows: Go routine created.", i, end)
+        }(i, end)
     }
     wg.Wait()
     close(windowChan)
+
     for window := range windowChan {
-        fmt.Println("appending windows")
         windows = append(windows, window)
     }
+
     fmt.Println("All windows added:", len(windows), len(adm.uuids))
 
     return windows
@@ -451,6 +462,7 @@ func (adm *ADMManager) generateDummyWindows(uuids []string) (windows []*Window) 
     return
 }
 
+//TODO: Generate based off of temporal interval.
 func (adm *ADMManager) generateDummyWindow(uuid string, size int64) *Window {
     readings := make([][]float64, 1)
     readings[0] = []float64{0, float64(size), 0, 0}
@@ -465,11 +477,12 @@ func (adm *ADMManager) getTimeseriesDest() func() string {
     return func() string {
         switch adm.writeMode {
             case WM_FILE:
-                dest := TIMESERIES_FOLDER + "ts_" + strconv.Itoa(fileCount)
+                splt := strings.Split(adm.config.TimeseriesDest, ".")
+                dest := splt[0] + strconv.Itoa(fileCount) + splt[1]
                 fileCount++
                 return dest
             case WM_GILES:
-                return adm.config.TimeseriesDest //placeholder
+                return adm.config.TimeseriesDest
             default:
                 return adm.config.TimeseriesDest //placeholder        
         }
@@ -508,30 +521,35 @@ func (adm *ADMManager) run() {
     wg.Add(2)
 
     adm.workers.acquire()
-    go func(wg *sync.WaitGroup) {
+    go func() {
         defer adm.workers.release()
         defer wg.Done()
         adm.processMetadata()
         log.Println("run: metadata finished")
-    }(&wg)
+    }()
 
     adm.workers.acquire()
-    go func(wg *sync.WaitGroup) {
+    go func() {
         defer adm.workers.release()
         defer wg.Done()
         adm.processTimeseriesData()
         log.Println("run: timeseries finished")
-    }(&wg)
+    }()
     wg.Wait()
     close(adm.errorChan)
     log.Println("run: adm finished")
 }
 
 func main() {
-    admConfig, err := newAdmConfig() //TODO: finish config
+    admConfig, err := newAdmConfig()
     if err != nil {
-        log.Println("Bad config file.")
-        // createConfigFile()
+        if _, err := os.Stat(CONFIG_FILE); os.IsNotExist(err) {
+            createConfigFile()
+            log.Println("No config file detected.\nNew config file created.")
+        } else {
+            log.Println("Bad config file.")
+        }
+        return
     }
 
     adm := newADMManager(admConfig)
@@ -557,13 +575,4 @@ func main() {
     log.Println("Log initialized.")
 
     adm.run()
-
-    //testing
-    // ids := []string{"11d93edc-9a0e-5896-8cbe-4888ba52dcbd", "12a4db87-67e1-5fc7-99fa-33b01e32c0b4"}
-    // fmt.Println(adm.reader.readWindow(adm.url, "11d93edc-9a0e-5896-8cbe-4888ba52dcbd"))
-    // r := newNetworkReader(adm.log)
-    // var w []*Window
-    // w = r.readWindowsBatched(adm.url, ids)
-    // fmt.Println(w[0], "\n", w[1])
-    // fmt.Println(adm.uuids)
 }
