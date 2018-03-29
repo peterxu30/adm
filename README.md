@@ -2,7 +2,7 @@
 Archived Data Migrator
 For Software Defined Buildings
 
-##Program Flow
+## Program Flow
 adm works in a parallelized manner with go routines reading from the source and writing to channels from which other go routines read and write to specified destinations.
 
 adm can be abstracted to three main components. adm itself as well as reader and writer APIs that conform to the Reader and Writer interface.
@@ -10,13 +10,13 @@ adm can be abstracted to three main components. adm itself as well as reader and
 2. Readers - Responsible for reading data from a specified source. This can be through HTTP calls or reading local files.
 3. Writers - Responsible for writing data to a specified destination. Destinations can be local files or a network endpoint.
 
-##How to Run
+## How to Run
 1. Clone the repo.
 2. Install dependencies: `go get`
 3. Build adm: `go build`
 4. Run adm: `./adm`
 
-##Configurations
+## Configurations
 The `params.yml` file contains modifiable settings. Settings are listed below:
 1. source_url: Source url to query for data. (TODO: Allow for multiple sources for metadata, timeseries data, etc.)
 2. worker_size: Loose bound on maximum number of running go routines allowed.
@@ -27,7 +27,7 @@ The `params.yml` file contains modifiable settings. Settings are listed below:
 7. write_mode: Specified write mode (See Write Mode)                          
 8. chunk_size: Rough estimate of number of timeseries tuples to process per go routine.                           
 
-##Read Mode
+## Read Mode
 adm supports reading data from various sources. Modes are integers corresponding to an implementation of the Reader interface. As of now, only one read mode is implemented.
 ```
 type Reader interface {
@@ -39,7 +39,7 @@ type Reader interface {
 ```
 1. 1 (Giles Mode) - Read from Giles endpoint.
 
-##Write Mode
+## Write Mode
 adm supports writing data to various destinations. Modes are integers corresponding to an implementation of the Writer interface. As of now, only one write mode is implemented.
 ```
 type Writer interface {
@@ -50,6 +50,6 @@ type Writer interface {
 ```
 1. 2 (File Mode) - Write to local files.
 
-##Required Libraries
+## Required Libraries
 1. [Bolt](https://github.com/boltdb/bolt)
 2. [go-yaml](gopkg.in/yaml.v2)
